@@ -1,0 +1,23 @@
+# Payment API
+
+결제/구독(정기결제) 서비스 — Toss페이/카카오페이/네이버페이 연동, 결제 성공 시 OWNER 승급/강등 이벤트 발행.
+
+**문서 관리는 전부 Obsidian에서 한다 (이 파일 제외).** 설계 근거, DB 스키마, PG 연동 가이드, 이슈 목록, "왜 이렇게 했는가" 전부 Obsidian vault의 `4iren/payment/`에 있다. **세션 시작 시 반드시 `00-INDEX.md`부터 읽고, `2-Areas/핸드오프-현재상태.md`와 `2-Areas/아키텍처-Q&A.md`를 확인할 것.** repo(이 파일 제외)엔 문서를 두지 않는다.
+
+## 스택
+- Spring Boot 3.5.16, Java 21, Maven
+- MySQL 8.0 (전용 스키마 `payment_db`, 다른 서비스 DB와 완전 분리)
+- RabbitMQ (Account와의 OWNER 승급/강등 이벤트 연동)
+- Redis + Shedlock (자동청구 스케줄러 분산락)
+
+## 아키텍처 원칙 (반드시 지킬 것)
+1. **Database-per-Service**: 다른 서비스 DB에 직접 접근 금지. Account/Core와는 RabbitMQ 이벤트로만.
+2. **OWNER는 Account 소유 개념**(`UserRole.OWNER`). Core의 `TeamRole.OWNER`는 팀 멤버십 내 별개 역할 — 이름만 같고 무관, 혼동 주의.
+3. **하드 삭제 없음**. `billing_keys`/`subscriptions`는 전부 상태 전이(`ACTIVE`/`DELETED`, `PAST_DUE`/`EXPIRED` 등)로만 표현. FK는 `ON DELETE` 절 없음(기본값 `RESTRICT`) — cascade 자체를 안 씀.
+4. **`billing_keys.provider_credential`은 반드시 암호화**(`EncryptedStringConverter`). `payment.crypto.password`/`salt`는 `4iren-config-repo`에서 공급, 로컬 application.yaml엔 두지 않음.
+5. **결제수단 변경은 in-place UPDATE 금지** — 새 row 등록(ACTIVE) 후 기존 row `DELETED` 처리, `subscriptions.billing_key_id` 재연결.
+6. **generic `updated_at` 없음** — 대신 의미 있는 개별 전이 컬럼(`canceled_at`/`expired_at`/`approved_at`/`deleted_at`) 사용.
+7. **정기결제는 "등록"과 "청구"가 별개 이벤트**. 등록 확정 전까지 `billing_keys` row 자체를 만들지 않음(Redis TTL로 상관관계만 임시 보관).
+
+## 진행 상태
+Obsidian `2-Areas/핸드오프-현재상태.md` 참고 — 지금 어디까지 됐고 다음에 뭘 해야 하는지는 여기서 관리.

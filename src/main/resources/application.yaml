@@ -1,0 +1,4 @@
+spring:
+  application:
+    name: 4iren-payment-api
+# payment.crypto.password / payment.crypto.salt 는 4iren-config-repo(4iren-payment-dev.properties / -prod.properties)에서 공급됨
