@@ -33,6 +33,7 @@ import java.util.Map;
 public class TossPaymentGateway implements RecurringPaymentGateway {
     // 승인 실패만으로 구독 상태를 판단하지 말고, 이 에러코드일 때만 상태조회로 재확인하라는 토스 권장사항
     private static final String ERROR_BILLING_KEY_NOT_FOUND = "COMMON_BILLING_KEY_NOT_FOUND";
+    private static final String NO_RESPONSE = "응답 없음";
 
     private final TossAdaptor tossAdaptor;
     private final ObjectMapper objectMapper;
@@ -86,7 +87,7 @@ public class TossPaymentGateway implements RecurringPaymentGateway {
 
         if (status == null || status.code() != 0 || !"ACTIVE".equals(status.status())) {
             throw new InactiveBillingKeyException("토스페이 빌링키 상태조회 결과가 ACTIVE가 아님: "
-                    + (status == null ? "응답 없음" : status.status()));
+                    + (status == null ? NO_RESPONSE : status.status()));
         }
 
         return new ConfirmedBillingKey(
@@ -101,7 +102,7 @@ public class TossPaymentGateway implements RecurringPaymentGateway {
         try {
             ChargeResponse response = tossAdaptor.executeBilling(credential.billingKey(), amount, orderId);
             if (response == null) {
-                return ChargeResult.failure("응답 없음", null);
+                return ChargeResult.failure(NO_RESPONSE, null);
             }
             String rawResponse = writeJson(response);
             if (response.code() == 0) {
@@ -128,7 +129,7 @@ public class TossPaymentGateway implements RecurringPaymentGateway {
         String billingKey = readCredential(providerCredential).billingKey();
         RemoveBillingKeyResponse response = tossAdaptor.removeBillingKey(billingKey);
         if (response == null || response.code() != 0) {
-            throw new BillingKeyRemoveException("토스페이 빌링키 삭제 실패: " + (response == null ? "응답 없음" : response.msg()));
+            throw new BillingKeyRemoveException("토스페이 빌링키 삭제 실패: " + (response == null ? NO_RESPONSE : response.msg()));
         }
     }
 

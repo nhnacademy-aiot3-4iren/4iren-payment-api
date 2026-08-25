@@ -105,7 +105,7 @@ public class SubscriptionsService {
     public void markPastDue(Long subscriptionId){
         Subscriptions subscriptions = findLocked(subscriptionId);
         if (subscriptions.getRetryCount() >= maxRetryCount) {
-            markExpired(subscriptionId);
+            expireAndPublish(subscriptions);
         } else {
             subscriptions.markPastDue();
         }
@@ -119,7 +119,10 @@ public class SubscriptionsService {
      */
     @Transactional
     public void markExpired(Long subscriptionId){
-        Subscriptions subscriptions = findLocked(subscriptionId);
+        expireAndPublish(findLocked(subscriptionId));
+    }
+
+    private void expireAndPublish(Subscriptions subscriptions) {
         subscriptions.markExpired();
         roleChangeEventPublisher.requestRoleChange(subscriptions.getUserId(), RoleChangeRequested.NORMAL, null);
     }

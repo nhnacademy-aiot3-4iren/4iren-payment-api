@@ -1,11 +1,11 @@
 package com.siren.sirenpaymentapi.service;
 
 import com.siren.sirenpaymentapi.client.CoreApiClient;
-import com.siren.sirenpaymentapi.domain.Plan;
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckRequest;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckResponse;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
@@ -52,12 +52,13 @@ public class BillingKeyRegistrationService {
      * planPriceId는 등록 시작 시점에 확정된 가격 row 참조(가격 고정/grandfathering, PendingRegistration에서 옴).
      */
     @Transactional
-    public void confirmRegistration(Long userId, Provider provider, String credential, String maskedInfo,
-                                    Plan plan, Long amount, Long planPriceId, String tokenId) {
-        BillingKeys billingKeys = billingKeysService.registerBillingKeys(userId, provider, credential, maskedInfo);
-        PlanPrices planPrice = planPricesService.getReference(planPriceId);
-        subscriptionsService.registerSubscription(userId, billingKeys, planPrice, plan, amount);
-        roleChangeEventPublisher.requestRoleChange(userId, RoleChangeRequested.OWNER, tokenId);
+    public void confirmRegistration(ConfirmRegistrationCommand command) {
+        BillingKeys billingKeys = billingKeysService.registerBillingKeys(
+                command.userId(), command.provider(), command.providerCredential(), command.maskedInfo());
+        PlanPrices planPrice = planPricesService.getReference(command.planPriceId());
+        subscriptionsService.registerSubscription(
+                command.userId(), billingKeys, planPrice, command.plan(), command.amount());
+        roleChangeEventPublisher.requestRoleChange(command.userId(), RoleChangeRequested.OWNER, command.tokenId());
     }
 
     /**

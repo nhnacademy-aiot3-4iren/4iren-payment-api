@@ -1,9 +1,9 @@
 package com.siren.sirenpaymentapi.repository;
 
+import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.siren.sirenpaymentapi.domain.SubscriptionStatus;
 import com.siren.sirenpaymentapi.domain.entity.QSubscriptions;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
-import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -17,7 +17,7 @@ public class SubscriptionsRepositoryImpl implements SubscriptionsRepositoryCusto
 
     private final JPAQueryFactory queryFactory;
 
-    private final QSubscriptions subscription = QSubscriptions.subscriptions;
+    private static final QSubscriptions subscription = QSubscriptions.subscriptions;
 
     @Override
     public List<Subscriptions> findDueForBilling(LocalDate billingDate) {

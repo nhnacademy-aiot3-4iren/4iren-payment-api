@@ -2,6 +2,7 @@ package com.siren.sirenpaymentapi.controller.toss;
 
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
+import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationRequest;
 import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationResponse;
 import com.siren.sirenpaymentapi.dto.gateway.ConfirmedBillingKey;
@@ -18,11 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.Optional;
@@ -86,9 +83,9 @@ public class TossBillingKeyRegistrationController {
             return handleMissingPending(callbackParams, billingKey);
         }
 
-        billingKeyRegistrationService.confirmRegistration(pending.get().userId(), Provider.TOSS_PAY,
-                confirmed.providerCredential(), confirmed.maskedInfo(), pending.get().plan(),
-                pending.get().amount(), pending.get().planPriceId(), pending.get().tokenId());
+        billingKeyRegistrationService.confirmRegistration(new ConfirmRegistrationCommand(
+                pending.get().userId(), Provider.TOSS_PAY, confirmed.providerCredential(), confirmed.maskedInfo(),
+                pending.get().plan(), pending.get().amount(), pending.get().planPriceId(), pending.get().tokenId()));
 
         return ResponseEntity.ok().build();
     }

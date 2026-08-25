@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * 정기결제 2회차 이후 승인 응답 - approve와 사실상 같은 승인 API라 같은 모양으로 옴(공식 문서에서
- * 이 엔드포인트 전용 응답 필드를 확정 못 함, TODO: 실제 호출해서 검증 필요).
  * payments.raw_response에 원본을 통째로 저장할 거라(Toss ChargeResponse와 동일 원칙) 필드를 덜 쳐냄.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)

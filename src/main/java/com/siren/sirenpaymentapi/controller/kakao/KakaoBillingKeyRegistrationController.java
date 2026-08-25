@@ -2,6 +2,7 @@ package com.siren.sirenpaymentapi.controller.kakao;
 
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
+import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationRequest;
 import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationResponse;
 import com.siren.sirenpaymentapi.dto.gateway.ConfirmedBillingKey;
@@ -94,9 +95,9 @@ public class KakaoBillingKeyRegistrationController {
             ConfirmedBillingKey confirmed = gatewayRegistry.getGateway(Provider.KAKAO_PAY)
                     .confirmRegistration(callbackParams);
 
-            billingKeyRegistrationService.confirmRegistration(pending.get().userId(), Provider.KAKAO_PAY,
-                    confirmed.providerCredential(), confirmed.maskedInfo(), pending.get().plan(),
-                    pending.get().amount(), pending.get().planPriceId(), pending.get().tokenId());
+            billingKeyRegistrationService.confirmRegistration(new ConfirmRegistrationCommand(
+                    pending.get().userId(), Provider.KAKAO_PAY, confirmed.providerCredential(), confirmed.maskedInfo(),
+                    pending.get().plan(), pending.get().amount(), pending.get().planPriceId(), pending.get().tokenId()));
 
             return redirectTo(successUrl);
         } catch (Exception e) {

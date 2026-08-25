@@ -1,10 +1,10 @@
 package com.siren.sirenpaymentapi.repository;
 
+import com.querydsl.core.types.Projections;
+import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.siren.sirenpaymentapi.domain.PaymentStatus;
 import com.siren.sirenpaymentapi.domain.entity.QPayments;
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
-import com.querydsl.core.types.Projections;
-import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -17,7 +17,7 @@ public class PaymentsRepositoryImpl implements PaymentsRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
 
-    private final QPayments payment = QPayments.payments;
+    private static final QPayments payment = QPayments.payments;
 
     @Override
     public List<StuckPayment> findStuckInReady(LocalDateTime cutoff) {
