@@ -1,0 +1,77 @@
+### GET request to example server
+GET https://examples.http-client.intellij.net/get
+    ?generated-in=IntelliJ IDEA
+
+###
+GET http://localhost:8080/api/payments/plans
+
+
+### 1. 카카오 등록 시작 - 로컬로 직접 호출. 응답의 redirectUrl을 브라우저에 붙여넣어서 진행.
+### (Redis에 orderId 키로 pending registration이 저장됨 - 아래 2번에서 이 orderId가 필요함)
+### userId/tokenId는 이제 body가 아니라 게이트웨이가 실어주는 헤더에서 읽음(X-USER-ID/X-TOKEN-ID).
+POST http://localhost:8115/api/payments/billing-keys/kakao/registrations
+Content-Type: application/json
+X-USER-ID: 55555
+X-USER-ROLE: NORMAL
+X-TOKEN-ID: test-token-55555
+
+{
+  "plan": "MONTHLY"
+}
+
+### 2. 카카오 콜백을 로컬에서 직접 재현.
+### ngrok이 안 먹힐 때: 브라우저가 리다이렉트하려다 실패한 주소창 URL에서 pg_token/orderId를 그대로 복사해서 아래에 채워넣고 호출.
+### (approval_url 자체가 "?orderId=..."를 포함하고 있어서, 실패한 페이지의 주소창 URL에 orderId도 이미 있음)
+### 정상 처리되면 302로 successUrl(https://4iren.site/payments/success)로 리다이렉트됨 - IntelliJ HTTP Client는 기본적으로 리다이렉트를 안 따라가니 응답 헤더의 Location으로 확인.
+GET http://localhost:8115/api/payments/billing-keys/kakao/callback?orderId=ab0e53ce-a24a-46d7-8b72-0ca80747809e&pg_token=699133c488dcabb10219
+
+### 3. (참고) DB 직접 확인용 안내 - test.http로는 안 되니 별도로 실행
+### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT * FROM billing_keys WHERE user_id=55555; SELECT * FROM subscriptions WHERE user_id=55555;"
+
+
+### 4. 토스 등록 시작 - 로컬로 직접 호출. 응답의 redirectUrl(checkoutUri)을 브라우저에 붙여넣어서 진행.
+### 카카오와 다르게 콜백은 토스 서버가 우리 ngrok URL로 직접 POST(서버 대 서버) - 브라우저 주소창엔 아무 것도 안 남아서
+### ngrok이 막히면 카카오 때처럼 수동 재현이 안 됨. ngrok이 실제로 살아있는지(inspector: http://127.0.0.1:4040) 먼저 확인할 것.
+### userId/tokenId는 이제 body가 아니라 헤더에서 읽음.
+POST http://localhost:8115/api/payments/billing-keys/toss/registrations
+Content-Type: application/json
+X-USER-ID: 66666
+X-USER-ROLE: NORMAL
+X-TOKEN-ID: test-token-66666
+
+{
+  "plan": "MONTHLY"
+}
+
+### 5. (참고) 토스 콜백은 여기로 수동 호출할 수 없음(토스가 실제로 알아야 하는 billingKey 등은 위 요청 응답/ngrok inspector에서 확인).
+### 정상 도착하면 서버 로그 또는 ngrok inspector(http://127.0.0.1:4040)에서 POST /callback 확인 가능.
+
+### 6. (참고) DB 직접 확인용
+### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT * FROM billing_keys WHERE user_id=66666; SELECT * FROM subscriptions WHERE user_id=66666;"
+
+
+### 7. 청구(자동청구 스케줄러) 검증 - 브라우저 없음, 서버 대 서버.
+### 사전 준비(둘 다 필요):
+###  (a) 4iren-config-repo/4iren-payment-dev.properties에 임시로 추가: payment.billing.cron=0 */1 * * * *  (매분 실행, 검증 끝나면 반드시 원복)
+###  (b) 아래 SQL로 테스트 구독의 next_billing_date를 오늘로 당겨서 스케줄러 대상에 걸리게 함:
+### docker exec notification-mysql mysql -uroot -plocal payment_db -e "UPDATE subscriptions SET next_billing_date = CURDATE() WHERE user_id IN (55555, 66666);"
+### 이후 Config Server 갱신 반영해서 앱 재기동 -> 최대 1분 내로 SubscriptionBillingScheduler가 돎 -> 서버 로그(자동청구 스케줄러 시작/종료) 확인.
+
+### 8. 청구 결과 DB 확인 - payments에 SUCCEEDED row 추가됐는지, subscriptions.next_billing_date가 다음 주기로 넘어갔는지
+### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT * FROM payments WHERE user_id IN (55555,66666) ORDER BY payment_id DESC LIMIT 5; SELECT user_id, status, next_billing_date, retry_count FROM subscriptions WHERE user_id IN (55555,66666);"
+
+### 9. (청구 검증 끝나면) config-repo의 payment.billing.cron 임시 값 반드시 제거 - 안 지우면 실서비스 스케줄이 매분 도는 채로 남음
+
+
+### 10. 해지(구독 취소) - 신규 SubscriptionController, PG revoke() 실제 호출 + billing_keys/subscriptions 정리.
+### 카카오 쪽(userId=55555) 먼저 검증 권장 - 청구(7~8번) 이후에 할 것(해지하면 빌링키가 사라져서 그 뒤엔 청구 테스트 불가).
+### path variable 대신 X-USER-ID 헤더에서 읽음(남의 userId로 해지 못 하게).
+DELETE http://localhost:8115/api/payments/subscriptions
+X-USER-ID: 55555
+
+### 11. 토스 쪽(userId=66666) 해지
+DELETE http://localhost:8115/api/payments/subscriptions
+X-USER-ID: 66666
+
+### 12. 해지 결과 DB 확인 - billing_keys.status=DELETED(+deleted_at), subscriptions.status=CANCELED(+canceled_at)
+### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT user_id, status, deleted_at FROM billing_keys WHERE user_id IN (55555,66666); SELECT user_id, status, canceled_at FROM subscriptions WHERE user_id IN (55555,66666);"

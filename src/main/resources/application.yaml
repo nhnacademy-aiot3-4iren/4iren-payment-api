@@ -1,4 +1,7 @@
 spring:
   application:
-    name: 4iren-payment-api
-# payment.crypto.password / payment.crypto.salt 는 4iren-config-repo(4iren-payment-dev.properties / -prod.properties)에서 공급됨
+    name: 4iren-payment
+  config:
+    import: ${CONFIG_SERVER_URL:optional:configserver:http://localhost:8888}
+server:
+  port: 8115

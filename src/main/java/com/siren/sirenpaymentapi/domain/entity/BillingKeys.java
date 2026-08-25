@@ -26,7 +26,7 @@ public class BillingKeys extends BaseEntity {
 
     @Column(name = "provider", length = 20, nullable = false)
     @Enumerated(EnumType.STRING)
-    private Provider provider;
+    private Provider provider; // Toss, kakao , naver
 
     @Column(name = "provider_credential", columnDefinition = "TEXT", nullable = false)
     @Convert(converter = EncryptedStringConverter.class)
@@ -42,4 +42,12 @@ public class BillingKeys extends BaseEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    //빌링 키 소프트 삭제
+    public void markDeleted() {
+        this.deletedAt = LocalDateTime.now(ZONE_ID);
+        this.status = BillingKeyStatus.DELETED;
+    }
+
+
 }
