@@ -17,6 +17,7 @@ import com.siren.sirenpaymentapi.exception.BillingKeyRemoveException;
 import com.siren.sirenpaymentapi.exception.InactiveBillingKeyException;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGateway;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -30,6 +31,7 @@ import java.util.Map;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class TossPaymentGateway implements RecurringPaymentGateway {
     // 승인 실패만으로 구독 상태를 판단하지 말고, 이 에러코드일 때만 상태조회로 재확인하라는 토스 권장사항
     private static final String ERROR_BILLING_KEY_NOT_FOUND = "COMMON_BILLING_KEY_NOT_FOUND";
@@ -56,7 +58,8 @@ public class TossPaymentGateway implements RecurringPaymentGateway {
         CreateBillingKeyResponse response = tossAdaptor.createBillingKey(userId, returnUrl);
 
         if (response == null || response.code() != 0) {
-            throw new BillingKeyRegistrationException(Provider.TOSS_PAY);
+            throw new BillingKeyRegistrationException(Provider.TOSS_PAY,
+                    response == null ? NO_RESPONSE : response.errorCode() + " - " + response.msg());
         }
         return new RegistrationStart(response.checkoutUri(), response.billingKey(), null);
     }

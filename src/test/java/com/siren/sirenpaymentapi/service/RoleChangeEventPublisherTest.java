@@ -8,7 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.ReturnedMessage;
@@ -40,7 +40,7 @@ class RoleChangeEventPublisherTest {
 
     @BeforeEach
     void setUp() {
-        DirectExchange exchange = new DirectExchange("payment.events");
+        TopicExchange exchange = new TopicExchange("payment.events");
         roleChangeEventPublisher = new RoleChangeEventPublisher(
                 applicationEventPublisher, rabbitTemplate, exchange, roleChangeFailureLogService);
         ReflectionTestUtils.setField(roleChangeEventPublisher, "routingKey", "payment.role-change");
@@ -53,7 +53,7 @@ class RoleChangeEventPublisherTest {
         ArgumentCaptor<RoleChangeRequested> captor = ArgumentCaptor.forClass(RoleChangeRequested.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         assertEquals(1L, captor.getValue().userId());
-        assertEquals(RoleChangeRequested.OWNER, captor.getValue().targetRole());
+        assertEquals(RoleChangeRequested.OWNER, captor.getValue().role());
     }
 
     @Test

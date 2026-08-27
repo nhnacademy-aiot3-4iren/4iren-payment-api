@@ -6,4 +6,8 @@ public class BillingKeyRegistrationException extends RuntimeException {
     public BillingKeyRegistrationException(Provider provider) {
         super(provider.name() + "빌링키 생성 실패");
     }
+
+    public BillingKeyRegistrationException(Provider provider, String reason) {
+        super(provider.name() + "빌링키 생성 실패: " + reason);
+    }
 }

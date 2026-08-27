@@ -7,10 +7,14 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param code 응답 코드 성공 시 0
  * @param billingKey 생성된 빌링키
  * @param checkoutUri 사용자를 인증시킬 URI
+ * @param errorCode 실패 시
+ * @param msg 실패 시 사유
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreateBillingKeyResponse(
         int code,
         String billingKey,
-        String checkoutUri
+        String checkoutUri,
+        String errorCode,
+        String msg
 ) {}

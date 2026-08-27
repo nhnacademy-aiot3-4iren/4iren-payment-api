@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
  * PG 무관 구독 관리 엔드포인트 - 등록/콜백은 PG별 컨트롤러(controller/toss, controller/kakao)가 담당하지만
  */
 @RestController
-@RequestMapping("/api/payments/subscriptions")
+@RequestMapping("/api/payment/subscriptions")
 @RequiredArgsConstructor
 public class SubscriptionController {
     private final BillingKeyRegistrationService billingKeyRegistrationService;

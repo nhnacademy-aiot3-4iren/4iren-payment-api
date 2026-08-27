@@ -31,7 +31,6 @@ public class SubscriptionBillingScheduler {
     private final SubscriptionsService subscriptionsService;
     private final SubscriptionChargeCoordinator subscriptionChargeCoordinator;
 
-    // PG 실제 레이트리밋 정책 미확인 - 확인 전까지의 임시값, 근거는 Obsidian 아키텍처-Q&A 참고
     @Value("${payment.billing.max-concurrent-charges:10}")
     private int maxConcurrentCharges;
 

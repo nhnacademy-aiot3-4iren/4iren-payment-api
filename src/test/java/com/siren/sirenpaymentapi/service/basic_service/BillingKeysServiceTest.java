@@ -75,4 +75,55 @@ class BillingKeysServiceTest {
 
         assertThrows(NotFoundBillingKeysException.class, () -> billingKeysService.deleteBillingKeys(1L));
     }
+
+    @Test
+    void findPendingByUserIdReturnsBillingKey() {
+        BillingKeys billingKey = BillingKeys.builder().id(1L).userId(1L).status(BillingKeyStatus.PENDING).build();
+        when(billingKeysRepository.findByUserIdAndStatus(1L, BillingKeyStatus.PENDING))
+                .thenReturn(Optional.of(billingKey));
+
+        Optional<BillingKeys> result = billingKeysService.findPendingByUserId(1L);
+
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void registerPendingBillingKeySavesPendingBillingKey() {
+        when(billingKeysRepository.findByUserIdAndStatus(1L, BillingKeyStatus.PENDING)).thenReturn(Optional.empty());
+        when(billingKeysRepository.save(any(BillingKeys.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BillingKeys result = billingKeysService.registerPendingBillingKey(1L, Provider.TOSS_PAY, "credential", "CARD");
+
+        assertEquals(BillingKeyStatus.PENDING, result.getStatus());
+        assertEquals(1L, result.getUserId());
+    }
+
+    @Test
+    void registerPendingBillingKeyDiscardsExistingPending() {
+        BillingKeys existingPending = BillingKeys.builder().id(9L).status(BillingKeyStatus.PENDING).build();
+        when(billingKeysRepository.findByUserIdAndStatus(1L, BillingKeyStatus.PENDING))
+                .thenReturn(Optional.of(existingPending));
+        when(billingKeysRepository.save(any(BillingKeys.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        billingKeysService.registerPendingBillingKey(1L, Provider.TOSS_PAY, "credential", "CARD");
+
+        assertEquals(BillingKeyStatus.DELETED, existingPending.getStatus());
+    }
+
+    @Test
+    void activateBillingKeyMarksActive() {
+        BillingKeys billingKey = BillingKeys.builder().id(1L).status(BillingKeyStatus.PENDING).build();
+        when(billingKeysRepository.findById(1L)).thenReturn(Optional.of(billingKey));
+
+        billingKeysService.activateBillingKey(1L);
+
+        assertEquals(BillingKeyStatus.ACTIVE, billingKey.getStatus());
+    }
+
+    @Test
+    void activateBillingKeyThrowsWhenNotFound() {
+        when(billingKeysRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundBillingKeysException.class, () -> billingKeysService.activateBillingKey(1L));
+    }
 }

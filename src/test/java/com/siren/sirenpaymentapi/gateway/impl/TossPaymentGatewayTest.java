@@ -48,7 +48,7 @@ class TossPaymentGatewayTest {
     @Test
     void startRegistrationReturnsRedirectUrl() {
         when(tossAdaptor.createBillingKey(1L, "http://return-url"))
-                .thenReturn(new CreateBillingKeyResponse(0, "billing-key-1", "http://checkout-uri"));
+                .thenReturn(new CreateBillingKeyResponse(0, "billing-key-1", "http://checkout-uri", null, null));
 
         RegistrationStart result = tossPaymentGateway.startRegistration(1L, "http://return-url");
 
@@ -59,7 +59,7 @@ class TossPaymentGatewayTest {
     @Test
     void startRegistrationThrowsWhenCodeNotZero() {
         when(tossAdaptor.createBillingKey(1L, "http://return-url"))
-                .thenReturn(new CreateBillingKeyResponse(-1, null, null));
+                .thenReturn(new CreateBillingKeyResponse(-1, null, null, "REJECT_CARD_COMPANY", "카드사 거절"));
 
         assertThrows(BillingKeyRegistrationException.class,
                 () -> tossPaymentGateway.startRegistration(1L, "http://return-url"));

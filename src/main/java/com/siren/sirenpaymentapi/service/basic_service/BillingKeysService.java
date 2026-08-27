@@ -21,6 +21,11 @@ public class BillingKeysService {
         return billingKeysRepository.findByUserIdAndStatus(userId, BillingKeyStatus.ACTIVE);
     }
 
+    // 결제수단 변경 예약 여부 확인 - 다음 청구 시점에 SubscriptionChargeCoordinator가 사용
+    public Optional<BillingKeys> findPendingByUserId(Long userId) {
+        return billingKeysRepository.findByUserIdAndStatus(userId, BillingKeyStatus.PENDING);
+    }
+
     /**
      * PG 등록 절차가 확정된 시점에 호출.
      * 등록 확정 전(PG 인증 대기 중)에는 row 자체를 만들지 않으므로.. 이 메서드가 곧 row 생성 시점 = 활성화 시점이다.
@@ -46,5 +51,33 @@ public class BillingKeysService {
         BillingKeys billingKeys = billingKeysRepository.findById(billingKeyId)
                 .orElseThrow(()-> new NotFoundBillingKeysException(billingKeyId));
         billingKeys.markDeleted();
+    }
+
+    /**
+     * 결제수단 변경 시작 시 호출 - 새 빌링키를 PENDING으로만 저장한다.
+     * 기존 ACTIVE 키/구독은 여기서 전혀 안 건드림 - 실제 교체는 다음 청구 시점에
+     * BillingKeyRegistrationService.applyPendingBillingKeyIfAny가 담당.
+     * 이미 예약된 게 있으면(변경을 다시 시작한 경우) 마지막 요청만 유효하도록 먼저 폐기한다.
+     */
+    @Transactional
+    public BillingKeys registerPendingBillingKey(Long userId, Provider provider, String credential, String maskedInfo) {
+        findPendingByUserId(userId).ifPresent(BillingKeys::markDeleted);
+
+        BillingKeys billingKeys = BillingKeys.builder()
+                .userId(userId)
+                .provider(provider)
+                .providerCredential(credential)
+                .maskedInfo(maskedInfo)
+                .status(BillingKeyStatus.PENDING)
+                .build();
+        return billingKeysRepository.save(billingKeys);
+    }
+
+    // 예약된 빌링키를 실제로 활성화 - 다음 청구 시점에 호출
+    @Transactional
+    public void activateBillingKey(Long billingKeyId) {
+        BillingKeys billingKeys = billingKeysRepository.findById(billingKeyId)
+                .orElseThrow(() -> new NotFoundBillingKeysException(billingKeyId));
+        billingKeys.markActive();
     }
 }
