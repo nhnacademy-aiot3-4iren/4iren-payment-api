@@ -3,5 +3,3 @@ spring:
     name: 4iren-payment
   config:
     import: ${CONFIG_SERVER_URL:optional:configserver:http://localhost:8888}
-server:
-  port: 8115
