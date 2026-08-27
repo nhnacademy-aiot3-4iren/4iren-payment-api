@@ -8,6 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,10 +42,22 @@ class SubscriptionChargeServiceTest {
 
     @Test
     void recordFailureMarksPastDue() {
-        subscriptionChargeService.recordFailure(1L, 2L, "실패 사유", "{}");
+        when(subscriptionsService.markPastDue(2L)).thenReturn(false);
+
+        boolean expired = subscriptionChargeService.recordFailure(1L, 2L, "실패 사유", "{}");
 
         verify(paymentsService).markFailed(1L, "실패 사유", "{}");
         verify(subscriptionsService).markPastDue(2L);
+        assertFalse(expired);
+    }
+
+    @Test
+    void recordFailureReturnsTrueWhenSubscriptionExpires() {
+        when(subscriptionsService.markPastDue(2L)).thenReturn(true);
+
+        boolean expired = subscriptionChargeService.recordFailure(1L, 2L, "실패 사유", "{}");
+
+        assertTrue(expired);
     }
 
     @Test

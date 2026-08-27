@@ -3,13 +3,13 @@ GET https://examples.http-client.intellij.net/get
     ?generated-in=IntelliJ IDEA
 
 ###
-GET http://localhost:8080/api/payments/plans
+GET http://localhost:8080/api/payment/plans
 
 
 ### 1. 카카오 등록 시작 - 로컬로 직접 호출. 응답의 redirectUrl을 브라우저에 붙여넣어서 진행.
 ### (Redis에 orderId 키로 pending registration이 저장됨 - 아래 2번에서 이 orderId가 필요함)
 ### userId/tokenId는 이제 body가 아니라 게이트웨이가 실어주는 헤더에서 읽음(X-USER-ID/X-TOKEN-ID).
-POST http://localhost:8115/api/payments/billing-keys/kakao/registrations
+POST http://localhost:8115/api/payment/billing-keys/kakao/registrations
 Content-Type: application/json
 X-USER-ID: 55555
 X-USER-ROLE: NORMAL
@@ -23,7 +23,7 @@ X-TOKEN-ID: test-token-55555
 ### ngrok이 안 먹힐 때: 브라우저가 리다이렉트하려다 실패한 주소창 URL에서 pg_token/orderId를 그대로 복사해서 아래에 채워넣고 호출.
 ### (approval_url 자체가 "?orderId=..."를 포함하고 있어서, 실패한 페이지의 주소창 URL에 orderId도 이미 있음)
 ### 정상 처리되면 302로 successUrl(https://4iren.site/payments/success)로 리다이렉트됨 - IntelliJ HTTP Client는 기본적으로 리다이렉트를 안 따라가니 응답 헤더의 Location으로 확인.
-GET http://localhost:8115/api/payments/billing-keys/kakao/callback?orderId=ab0e53ce-a24a-46d7-8b72-0ca80747809e&pg_token=699133c488dcabb10219
+GET http://localhost:8115/api/payment/billing-keys/kakao/callback?orderId=ae7b7a34-daa9-45d2-9920-53cbe09e3de5&pg_token=30d5c122393602592b1c
 
 ### 3. (참고) DB 직접 확인용 안내 - test.http로는 안 되니 별도로 실행
 ### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT * FROM billing_keys WHERE user_id=55555; SELECT * FROM subscriptions WHERE user_id=55555;"
@@ -33,7 +33,7 @@ GET http://localhost:8115/api/payments/billing-keys/kakao/callback?orderId=ab0e5
 ### 카카오와 다르게 콜백은 토스 서버가 우리 ngrok URL로 직접 POST(서버 대 서버) - 브라우저 주소창엔 아무 것도 안 남아서
 ### ngrok이 막히면 카카오 때처럼 수동 재현이 안 됨. ngrok이 실제로 살아있는지(inspector: http://127.0.0.1:4040) 먼저 확인할 것.
 ### userId/tokenId는 이제 body가 아니라 헤더에서 읽음.
-POST http://localhost:8115/api/payments/billing-keys/toss/registrations
+POST http://localhost:8115/api/payment/billing-keys/toss/registrations
 Content-Type: application/json
 X-USER-ID: 66666
 X-USER-ROLE: NORMAL
@@ -66,12 +66,12 @@ X-TOKEN-ID: test-token-66666
 ### 10. 해지(구독 취소) - 신규 SubscriptionController, PG revoke() 실제 호출 + billing_keys/subscriptions 정리.
 ### 카카오 쪽(userId=55555) 먼저 검증 권장 - 청구(7~8번) 이후에 할 것(해지하면 빌링키가 사라져서 그 뒤엔 청구 테스트 불가).
 ### path variable 대신 X-USER-ID 헤더에서 읽음(남의 userId로 해지 못 하게).
-DELETE http://localhost:8115/api/payments/subscriptions
+DELETE http://localhost:8115/api/payment/subscriptions
 X-USER-ID: 55555
 
 ### 11. 토스 쪽(userId=66666) 해지
-DELETE http://localhost:8115/api/payments/subscriptions
-X-USER-ID: 66666
+DELETE http://localhost:8115/api/payment/subscriptions
+X-USER-ID: 3
 
 ### 12. 해지 결과 DB 확인 - billing_keys.status=DELETED(+deleted_at), subscriptions.status=CANCELED(+canceled_at)
 ### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT user_id, status, deleted_at FROM billing_keys WHERE user_id IN (55555,66666); SELECT user_id, status, canceled_at FROM subscriptions WHERE user_id IN (55555,66666);"

@@ -2,6 +2,7 @@ package com.siren.sirenpaymentapi.service.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.siren.sirenpaymentapi.domain.Plan;
+import com.siren.sirenpaymentapi.domain.RegistrationMode;
 import com.siren.sirenpaymentapi.dto.kakao.PendingRegistration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class KakaoPendingRegistrationCacheTest {
     @Test
     void saveWritesJsonWithKakaoPrefix() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        PendingRegistration pendingRegistration = new PendingRegistration(1L, Plan.MONTHLY, 29000L, 1L, "tid-1", "token-1");
+        PendingRegistration pendingRegistration = new PendingRegistration(1L, Plan.MONTHLY, 29000L, 1L, "tid-1", "token-1", RegistrationMode.NEW);
 
         kakaoPendingRegistrationCache.save("order-1", pendingRegistration);
 

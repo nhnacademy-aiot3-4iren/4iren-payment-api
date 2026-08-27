@@ -102,13 +102,14 @@ public class SubscriptionsService {
      * 아니면 PAST_DUE로 전이시키고 retryCount를 1 증가(role/Account엔 PAST_DUE 자체는 아직 영향 없음).
      */
     @Transactional
-    public void markPastDue(Long subscriptionId){
+    public boolean markPastDue(Long subscriptionId){
         Subscriptions subscriptions = findLocked(subscriptionId);
         if (subscriptions.getRetryCount() >= maxRetryCount) {
             expireAndPublish(subscriptions);
-        } else {
-            subscriptions.markPastDue();
+            return true;
         }
+        subscriptions.markPastDue();
+        return false;
     }
 
     /**
@@ -125,6 +126,15 @@ public class SubscriptionsService {
     private void expireAndPublish(Subscriptions subscriptions) {
         subscriptions.markExpired();
         roleChangeEventPublisher.requestRoleChange(subscriptions.getUserId(), RoleChangeRequested.NORMAL, null);
+    }
+
+    /**
+     * 가입 직후 첫 청구가 실패했을 때 호출(BillingKeyRegistrationService.confirmRegistrationAndCharge).
+     * 아직 OWNER로 승격된 적이 없으므로 강등 이벤트는 발행하지 않는다 - markExpired()만으로 종결.
+     */
+    @Transactional
+    public void failInitialCharge(Long subscriptionId) {
+        findLocked(subscriptionId).markExpired();
     }
 
     /**

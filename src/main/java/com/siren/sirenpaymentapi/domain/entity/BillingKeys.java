@@ -49,5 +49,9 @@ public class BillingKeys extends BaseEntity {
         this.status = BillingKeyStatus.DELETED;
     }
 
+    // 예약(PENDING)된 결제수단 변경을 다음 청구 시점에 실제로 활성화할 때 호출
+    public void markActive() {
+        this.status = BillingKeyStatus.ACTIVE;
+    }
 
 }

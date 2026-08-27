@@ -1,6 +1,6 @@
 package com.siren.sirenpaymentapi.config;
 
-import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
@@ -16,8 +16,8 @@ import org.springframework.retry.support.RetryTemplate;
 public class RabbitMQConfig {
 
     @Bean
-    public DirectExchange paymentEventsExchange(@Value("${payment.role-change.exchange:payment.events}")String exchangeName) {
-        return new DirectExchange(exchangeName);
+    public TopicExchange paymentEventsExchange(@Value("${payment.role-change.exchange:payment.events}")String exchangeName) {
+        return new TopicExchange(exchangeName);
     }
 
 

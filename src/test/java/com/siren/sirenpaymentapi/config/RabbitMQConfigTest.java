@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -22,7 +22,7 @@ class RabbitMQConfigTest {
 
     @Test
     void paymentEventsExchangeUsesGivenName() {
-        DirectExchange exchange = rabbitMQConfig.paymentEventsExchange("payment.events");
+        TopicExchange exchange = rabbitMQConfig.paymentEventsExchange("payment.events");
 
         assertEquals("payment.events", exchange.getName());
     }

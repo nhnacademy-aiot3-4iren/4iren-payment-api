@@ -27,15 +27,19 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.BAD_REQUEST, e);
     }
 
-    @ExceptionHandler(AlreadyBelongsToTeamException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(AlreadyBelongsToTeamException e) {
+    @ExceptionHandler({
+            AlreadyBelongsToTeamException.class,
+            SameProviderBillingKeyChangeException.class
+    })
+    public ResponseEntity<ErrorResponse> handleConflict(RuntimeException e) {
         return respond(HttpStatus.CONFLICT, e);
     }
 
     @ExceptionHandler({
             BillingKeyRegistrationException.class,
             BillingKeyRemoveException.class,
-            InactiveBillingKeyException.class
+            InactiveBillingKeyException.class,
+            InitialChargeFailedException.class
     })
     public ResponseEntity<ErrorResponse> handlePgFailure(RuntimeException e) {
         log.error("PG 연동 실패", e);

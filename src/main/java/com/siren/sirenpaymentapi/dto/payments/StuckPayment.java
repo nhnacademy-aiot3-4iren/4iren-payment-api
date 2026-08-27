@@ -9,5 +9,5 @@ import java.time.LocalDateTime;
  * attemptedAt은 "이후 같은 구독에 더 최신 시도가 있었는지" 판단용 - 있으면 그 최신 시도가 이미 구독
  * 상태를 정확히 반영했으므로 이 stale row는 구독 상태를 건드리지 않고 기록만 정리해야 한다.
  */
-public record StuckPayment(Long paymentId, Long subscriptionId, LocalDateTime attemptedAt) {
+public record StuckPayment(Long paymentId, Long subscriptionId, Long userId, LocalDateTime attemptedAt) {
 }

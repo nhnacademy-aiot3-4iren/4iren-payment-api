@@ -76,7 +76,7 @@ class PaymentsServiceTest {
     @Test
     void findStuckInReadyReturnsList() {
         LocalDateTime cutoff = LocalDateTime.now();
-        StuckPayment stuckPayment = new StuckPayment(1L, 2L, LocalDateTime.now());
+        StuckPayment stuckPayment = new StuckPayment(1L, 2L, 3L, LocalDateTime.now());
         when(paymentsRepository.findStuckInReady(cutoff)).thenReturn(List.of(stuckPayment));
 
         List<StuckPayment> result = paymentsService.findStuckInReady(cutoff);

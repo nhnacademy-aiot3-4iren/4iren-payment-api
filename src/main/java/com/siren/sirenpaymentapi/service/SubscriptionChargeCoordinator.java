@@ -1,6 +1,7 @@
 package com.siren.sirenpaymentapi.service;
 
 import com.siren.sirenpaymentapi.domain.Provider;
+import com.siren.sirenpaymentapi.dto.gateway.ActiveBillingKey;
 import com.siren.sirenpaymentapi.dto.gateway.ChargeResult;
 import com.siren.sirenpaymentapi.dto.payments.PreparedCharge;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
@@ -28,10 +29,14 @@ public class SubscriptionChargeCoordinator {
     // 배치로 결제 청구
     public void chargeSubscription(Long subscriptionId, Long userId, Provider provider, String providerCredential,
                                     Long amount, boolean wasRecovering) {
+        // 예약된 결제수단 변경이 있으면 여기서 실제로 스왑하고 새 키를 돌려받는다 - 없으면 원래 값 그대로.
+        ActiveBillingKey active = billingKeyRegistrationService.applyPendingBillingKeyIfAny(
+                userId, subscriptionId, provider, providerCredential);
+
         PreparedCharge prepared = paymentsService.prepareCharge(subscriptionId, amount); // 결제 청구 준비
 
-        ChargeResult result = gatewayRegistry.getGateway(provider) // 게이트웨이 찾아오기
-                .charge(providerCredential, amount, prepared.orderId()); // 청구 API
+        ChargeResult result = gatewayRegistry.getGateway(active.provider()) // 게이트웨이 찾아오기
+                .charge(active.providerCredential(), amount, prepared.orderId()); // 청구 API
 
         if (result.success()) {
             subscriptionChargeService.recordSuccess(prepared.paymentId(), subscriptionId, wasRecovering,
@@ -47,7 +52,11 @@ public class SubscriptionChargeCoordinator {
             return;
         }
 
-        subscriptionChargeService.recordFailure(prepared.paymentId(), subscriptionId,
+        boolean expired = subscriptionChargeService.recordFailure(prepared.paymentId(), subscriptionId,
                 result.failureReason(), result.rawResponse());
+        if (expired) {
+            // Dunning 재시도를 다 소진해서 방금 EXPIRED로 전이됨 - 더 이상 청구 안 하니 PG 빌링키도 정리
+            billingKeyRegistrationService.revokeBillingKeyAfterExpiry(userId);
+        }
     }
 }

@@ -35,6 +35,14 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleConflictReturns409ForSameProviderChange() {
+        ResponseEntity<ErrorResponse> response = handler.handleConflict(
+                new SameProviderBillingKeyChangeException(com.siren.sirenpaymentapi.domain.Provider.TOSS_PAY));
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+    }
+
+    @Test
     void handlePgFailureReturns502() {
         ResponseEntity<ErrorResponse> response = handler.handlePgFailure(new BillingKeyRemoveException("실패"));
 

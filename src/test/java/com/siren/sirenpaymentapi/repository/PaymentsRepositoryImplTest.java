@@ -12,6 +12,7 @@ import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Payments;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.payments.PaymentHistoryResponse;
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -109,5 +110,27 @@ class PaymentsRepositoryImplTest {
         boolean result = paymentsRepositoryCustom.hasNewerAttempt(subscription.getId(), base);
 
         assertFalse(result);
+    }
+
+    @Test
+    void findByUserIdReturnsPaymentsForThatUserNewestFirst() {
+        Subscriptions subscription = createSubscription();
+        LocalDateTime now = LocalDateTime.now();
+        createPayment(subscription, PaymentStatus.DONE, now.minusDays(1), now.minusDays(1));
+        createPayment(subscription, PaymentStatus.DONE, now, now);
+
+        List<PaymentHistoryResponse> result = paymentsRepositoryCustom.findByUserId(1L);
+
+        assertEquals(2, result.size());
+        assertTrue(result.get(0).attemptedAt().isAfter(result.get(1).attemptedAt()));
+    }
+
+    @Test
+    void findByUserIdReturnsEmptyForOtherUser() {
+        createSubscription();
+
+        List<PaymentHistoryResponse> result = paymentsRepositoryCustom.findByUserId(999L);
+
+        assertTrue(result.isEmpty());
     }
 }

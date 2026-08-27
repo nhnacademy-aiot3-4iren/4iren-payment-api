@@ -3,6 +3,7 @@ package com.siren.sirenpaymentapi.service.basic_service;
 import com.siren.sirenpaymentapi.domain.PaymentStatus;
 import com.siren.sirenpaymentapi.domain.entity.Payments;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.payments.PaymentHistoryResponse;
 import com.siren.sirenpaymentapi.dto.payments.PreparedCharge;
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
 import com.siren.sirenpaymentapi.exception.NotFoundPaymentsException;
@@ -84,5 +85,10 @@ public class PaymentsService {
      */
     public boolean hasNewerAttempt(Long subscriptionId, LocalDateTime after) {
         return paymentsRepository.hasNewerAttempt(subscriptionId, after);
+    }
+
+    // 마이페이지 결제내역 조회
+    public List<PaymentHistoryResponse> findByUserId(Long userId) {
+        return paymentsRepository.findByUserId(userId);
     }
 }

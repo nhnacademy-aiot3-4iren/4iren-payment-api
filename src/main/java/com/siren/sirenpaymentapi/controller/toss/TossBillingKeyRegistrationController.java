@@ -1,6 +1,7 @@
 package com.siren.sirenpaymentapi.controller.toss;
 
 import com.siren.sirenpaymentapi.domain.Provider;
+import com.siren.sirenpaymentapi.domain.RegistrationMode;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationRequest;
@@ -28,7 +29,7 @@ import java.util.Optional;
  * 토스페이 빌링키 등록 흐름 전용 컨트롤러 - 카카오/네이버는 콜백 모양이 달라서 별도 컨트롤러로 뺄 예정(이슈 3).
  */
 @RestController
-@RequestMapping("/api/payments/billing-keys/toss")
+@RequestMapping("/api/payment/billing-keys/toss")
 @RequiredArgsConstructor
 @Slf4j
 public class TossBillingKeyRegistrationController {
@@ -58,8 +59,27 @@ public class TossBillingKeyRegistrationController {
                 .startRegistration(userId, callbackUrl);
 
         // tokenId도 같이 저장 - 콜백(토스 서버가 직접 POST) 시점엔 X-TOKEN-ID 헤더가 안 와서 지금 값을 미리 실어둬야 함.
+        pendingRegistrationCache.save(start.correlationKey(), new PendingRegistration(
+                userId, request.plan(), currentPrice.getAmount(), currentPrice.getId(), tokenId, RegistrationMode.NEW));
+
+        return new StartRegistrationResponse(start.redirectUrl());
+    }
+
+    /**
+     * 결제수단 변경 시작 - plan 정보 없이 PG 등록 플로우만 다시 태운다.
+     * 콜백에서 mode=CHANGE로 구분해서 새 빌링키를 PENDING으로만 저장한다(즉시 교체 아님, 다음 청구 시점에 교체).
+     */
+    @PostMapping("/registrations/change")
+    public StartRegistrationResponse startChangeBillingKey(@RequestHeader("X-USER-ID") Long userId,
+                                                             @RequestHeader("X-TOKEN-ID") String tokenId) {
+        // 활성 빌링키가 없거나, 이미 Toss가 활성이면(같은 PG로는 PG 정책상 재등록 불가) 여기서 막힘
+        billingKeyRegistrationService.verifyEligibleForBillingKeyChange(userId, Provider.TOSS_PAY);
+
+        RegistrationStart start = gatewayRegistry.getGateway(Provider.TOSS_PAY)
+                .startRegistration(userId, callbackUrl);
+
         pendingRegistrationCache.save(start.correlationKey(),
-                new PendingRegistration(userId, request.plan(), currentPrice.getAmount(), currentPrice.getId(), tokenId));
+                new PendingRegistration(userId, null, null, null, tokenId, RegistrationMode.CHANGE));
 
         return new StartRegistrationResponse(start.redirectUrl());
     }
@@ -83,7 +103,13 @@ public class TossBillingKeyRegistrationController {
             return handleMissingPending(callbackParams, billingKey);
         }
 
-        billingKeyRegistrationService.confirmRegistration(new ConfirmRegistrationCommand(
+        if (pending.get().mode() == RegistrationMode.CHANGE) {
+            billingKeysService.registerPendingBillingKey(
+                    pending.get().userId(), Provider.TOSS_PAY, confirmed.providerCredential(), confirmed.maskedInfo());
+            return ResponseEntity.ok().build();
+        }
+
+        billingKeyRegistrationService.confirmRegistrationAndCharge(new ConfirmRegistrationCommand(
                 pending.get().userId(), Provider.TOSS_PAY, confirmed.providerCredential(), confirmed.maskedInfo(),
                 pending.get().plan(), pending.get().amount(), pending.get().planPriceId(), pending.get().tokenId()));
 

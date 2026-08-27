@@ -132,9 +132,10 @@ class SubscriptionsServiceTest {
         Subscriptions subscription = newActiveSubscription();
         when(subscriptionsRepository.findLockedById(1L)).thenReturn(Optional.of(subscription));
 
-        subscriptionsService.markPastDue(1L);
+        boolean expired = subscriptionsService.markPastDue(1L);
 
         assertEquals(SubscriptionStatus.PAST_DUE, subscription.getStatus());
+        assertFalse(expired);
         verify(roleChangeEventPublisher, never()).requestRoleChange(any(), any(), any());
     }
 
@@ -152,9 +153,10 @@ class SubscriptionsServiceTest {
                 .build();
         when(subscriptionsRepository.findLockedById(1L)).thenReturn(Optional.of(subscription));
 
-        subscriptionsService.markPastDue(1L);
+        boolean expired = subscriptionsService.markPastDue(1L);
 
         assertEquals(SubscriptionStatus.EXPIRED, subscription.getStatus());
+        assertTrue(expired);
         verify(roleChangeEventPublisher).requestRoleChange(1L, RoleChangeRequested.NORMAL, null);
     }
 

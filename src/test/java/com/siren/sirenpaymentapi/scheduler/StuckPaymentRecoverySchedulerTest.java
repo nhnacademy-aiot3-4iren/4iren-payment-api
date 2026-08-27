@@ -1,6 +1,7 @@
 package com.siren.sirenpaymentapi.scheduler;
 
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
+import com.siren.sirenpaymentapi.service.BillingKeyRegistrationService;
 import com.siren.sirenpaymentapi.service.SubscriptionChargeService;
 import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
 import org.junit.jupiter.api.Test;
@@ -23,23 +24,40 @@ class StuckPaymentRecoverySchedulerTest {
     @Mock
     private SubscriptionChargeService subscriptionChargeService;
 
+    @Mock
+    private BillingKeyRegistrationService billingKeyRegistrationService;
+
     @InjectMocks
     private StuckPaymentRecoveryScheduler stuckPaymentRecoveryScheduler;
 
     @Test
     void recoverStuckPaymentsRecordsFailureWhenNoNewerAttempt() {
-        StuckPayment stuckPayment = new StuckPayment(1L, 2L, LocalDateTime.now());
+        StuckPayment stuckPayment = new StuckPayment(1L, 2L, 3L, LocalDateTime.now());
         when(paymentsService.findStuckInReady(any(LocalDateTime.class))).thenReturn(List.of(stuckPayment));
         when(paymentsService.hasNewerAttempt(eq(2L), any(LocalDateTime.class))).thenReturn(false);
+        when(subscriptionChargeService.recordFailure(eq(1L), eq(2L), anyString(), any())).thenReturn(false);
 
         stuckPaymentRecoveryScheduler.recoverStuckPayments();
 
         verify(subscriptionChargeService).recordFailure(eq(1L), eq(2L), anyString(), any());
+        verifyNoInteractions(billingKeyRegistrationService);
+    }
+
+    @Test
+    void recoverStuckPaymentsRevokesBillingKeyWhenSubscriptionExpires() {
+        StuckPayment stuckPayment = new StuckPayment(1L, 2L, 3L, LocalDateTime.now());
+        when(paymentsService.findStuckInReady(any(LocalDateTime.class))).thenReturn(List.of(stuckPayment));
+        when(paymentsService.hasNewerAttempt(eq(2L), any(LocalDateTime.class))).thenReturn(false);
+        when(subscriptionChargeService.recordFailure(eq(1L), eq(2L), anyString(), any())).thenReturn(true);
+
+        stuckPaymentRecoveryScheduler.recoverStuckPayments();
+
+        verify(billingKeyRegistrationService).revokeBillingKeyAfterExpiry(3L);
     }
 
     @Test
     void recoverStuckPaymentsOnlyMarksFailedWhenNewerAttemptExists() {
-        StuckPayment stuckPayment = new StuckPayment(1L, 2L, LocalDateTime.now());
+        StuckPayment stuckPayment = new StuckPayment(1L, 2L, 3L, LocalDateTime.now());
         when(paymentsService.findStuckInReady(any(LocalDateTime.class))).thenReturn(List.of(stuckPayment));
         when(paymentsService.hasNewerAttempt(eq(2L), any(LocalDateTime.class))).thenReturn(true);
 

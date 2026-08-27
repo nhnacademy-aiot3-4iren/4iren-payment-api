@@ -8,12 +8,19 @@ import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
 import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckRequest;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckResponse;
+import com.siren.sirenpaymentapi.dto.gateway.ActiveBillingKey;
+import com.siren.sirenpaymentapi.dto.gateway.ChargeResult;
+import com.siren.sirenpaymentapi.dto.payments.PreparedCharge;
+import com.siren.sirenpaymentapi.dto.subscriptions.BillingTarget;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.AlreadyBelongsToTeamException;
+import com.siren.sirenpaymentapi.exception.InitialChargeFailedException;
 import com.siren.sirenpaymentapi.exception.NotFoundBillingKeysException;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
+import com.siren.sirenpaymentapi.exception.SameProviderBillingKeyChangeException;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
 import com.siren.sirenpaymentapi.service.basic_service.BillingKeysService;
+import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
 import com.siren.sirenpaymentapi.service.basic_service.PlanPricesService;
 import com.siren.sirenpaymentapi.service.basic_service.SubscriptionsService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +33,8 @@ public class BillingKeyRegistrationService {
     private final BillingKeysService billingKeysService;
     private final SubscriptionsService subscriptionsService;
     private final PlanPricesService planPricesService;
+    private final PaymentsService paymentsService;
+    private final SubscriptionChargeService subscriptionChargeService;
     private final RecurringPaymentGatewayRegistry gatewayRegistry;
     private final RoleChangeEventPublisher roleChangeEventPublisher;
     private final CoreApiClient coreApiClient;
@@ -50,15 +59,48 @@ public class BillingKeyRegistrationService {
      * PG 등록(인증) 절차가 성공으로 확정된 시점에 호출
      * 빌링키 생성 + 구독 생성을 한 트랜잭션으로 묶는다 - 최초 가입 흐름의 진입점.
      * planPriceId는 등록 시작 시점에 확정된 가격 row 참조(가격 고정/grandfathering, PendingRegistration에서 옴).
+     * OWNER 승격은 여기서 하지 않는다 - confirmRegistrationAndCharge가 첫 청구 성공을 확인한 뒤에 한다.
+     * 반환값은 방금 만든 구독을 바로 청구하는 데 필요한 스칼라만 담은 BillingTarget(트랜잭션 밖으로 detached
+     * 엔티티를 넘기면 LazyInitializationException이 나므로).
      */
     @Transactional
-    public void confirmRegistration(ConfirmRegistrationCommand command) {
+    public BillingTarget confirmRegistration(ConfirmRegistrationCommand command) {
         BillingKeys billingKeys = billingKeysService.registerBillingKeys(
                 command.userId(), command.provider(), command.providerCredential(), command.maskedInfo());
         PlanPrices planPrice = planPricesService.getReference(command.planPriceId());
-        subscriptionsService.registerSubscription(
+        Subscriptions subscription = subscriptionsService.registerSubscription(
                 command.userId(), billingKeys, planPrice, command.plan(), command.amount());
-        roleChangeEventPublisher.requestRoleChange(command.userId(), RoleChangeRequested.OWNER, command.tokenId());
+        return new BillingTarget(subscription.getId(), command.userId(), command.provider(),
+                command.providerCredential(), command.amount(), false);
+    }
+
+    /**
+     * 등록 콜백 컨트롤러(Toss/Kakao)가 실제로 호출하는 진입점 - 빌링키/구독 생성 + 가입 직후 첫 청구를
+     * 한 흐름으로 묶는다. PG 호출은 트랜잭션 밖에서 한다(SubscriptionChargeCoordinator와 같은 이유).
+     * 첫 청구가 성공해야만 OWNER로 승격한다 - 실패하면 등록 자체를 실패 처리(구독 EXPIRED, 빌링키 PG에서도
+     * revoke)하고 예외를 던져서 사용자가 바로 재시도하게 한다. PAST_DUE 유예는 안 준다(첫 결제는 재시도
+     * 스케줄을 며칠씩 기다릴 이유가 없음).
+     */
+    public void confirmRegistrationAndCharge(ConfirmRegistrationCommand command) {
+        BillingTarget target = confirmRegistration(command);
+
+        PreparedCharge prepared = paymentsService.prepareCharge(target.subscriptionId(), target.amount());
+        ChargeResult result = gatewayRegistry.getGateway(target.provider())
+                .charge(target.providerCredential(), target.amount(), prepared.orderId());
+
+        if (result.success()) {
+            subscriptionChargeService.recordInitialChargeSuccess(
+                    prepared.paymentId(), result.providerTransactionId(), result.payToken(), result.rawResponse());
+            roleChangeEventPublisher.requestRoleChange(command.userId(), RoleChangeRequested.OWNER, command.tokenId());
+            return;
+        }
+
+        subscriptionChargeService.recordInitialChargeFailure(
+                prepared.paymentId(), target.subscriptionId(), result.failureReason(), result.rawResponse());
+        gatewayRegistry.getGateway(target.provider()).revoke(target.providerCredential());
+        billingKeysService.findActiveByUserId(command.userId())
+                .ifPresent(billingKeys -> billingKeysService.deleteBillingKeys(billingKeys.getId()));
+        throw new InitialChargeFailedException(result.failureReason());
     }
 
     /**
@@ -71,6 +113,55 @@ public class BillingKeyRegistrationService {
         BillingKeys billingKeys= billingKeysService.registerBillingKeys(userId, provider,newCredential,maskedInfo);
         billingKeysService.deleteBillingKeys(oldBillingKeyId);
         subscriptionsService.replaceBillingKey(subscriptionId, billingKeys);
+    }
+
+    /**
+     * 결제수단 변경 시작 전 확인. PG(Toss/Kakao)는 같은 userId로 이미 활성 빌링키가 있으면
+     * 새 빌링키 발급 자체를 거부한다(BILLING_KEY_ALREADY_ACTIVATED) - 그래서 같은 PG로는 절대
+     * 바꿀 수 없고, 지금 활성 PG와 "다른" PG로만 변경을 허용한다(Toss<->Kakao만 가능).
+     */
+    public BillingKeys verifyEligibleForBillingKeyChange(Long userId, Provider newProvider) {
+        BillingKeys active = billingKeysService.findActiveByUserId(userId)
+                .orElseThrow(() -> new NotFoundBillingKeysException("user=" + userId + "의 활성 빌링키를 찾을 수 없습니다."));
+        if (active.getProvider() == newProvider) {
+            throw new SameProviderBillingKeyChangeException(newProvider);
+        }
+        return active;
+    }
+
+    /**
+     * 청구 직전에 SubscriptionChargeCoordinator가 호출 - 예약(PENDING)된 결제수단 변경이 있으면
+     * 그제서야 실제로 스왑하고 새 키로 청구하게 한다. 예약 키는 항상 기존 활성 키와 다른 PG이므로
+     * (verifyEligibleForBillingKeyChange가 시작 시점에 이미 보장) 기존 키를 PG에서 revoke해도
+     * 새 키한테 영향이 없다 - 예약이 없으면 원래 청구에 쓰려던 provider/credential을 그대로 돌려준다.
+     */
+    @Transactional
+    public ActiveBillingKey applyPendingBillingKeyIfAny(Long userId, Long subscriptionId,
+                                                          Provider currentProvider, String currentCredential) {
+        return billingKeysService.findPendingByUserId(userId)
+                .map(pending -> {
+                    billingKeysService.findActiveByUserId(userId).ifPresent(old -> {
+                        gatewayRegistry.getGateway(old.getProvider()).revoke(old.getProviderCredential());
+                        billingKeysService.deleteBillingKeys(old.getId());
+                    });
+                    billingKeysService.activateBillingKey(pending.getId());
+                    subscriptionsService.replaceBillingKey(subscriptionId, pending);
+                    return new ActiveBillingKey(pending.getProvider(), pending.getProviderCredential());
+                })
+                .orElse(new ActiveBillingKey(currentProvider, currentCredential));
+    }
+
+    /**
+     * 구독이 Dunning 재시도를 다 소진하고 EXPIRED로 전이된 직후 SubscriptionChargeCoordinator가 호출.
+     * 더 이상 청구할 일이 없는 빌링키를 PG에서도 revoke하고 우리 쪽도 DELETED로 정리한다 -
+     * 안 하면 이 유저가 나중에 재결제할 때 PG가 "이미 활성 빌링키 있음"으로 새 등록 자체를 거부한다.
+     */
+    @Transactional
+    public void revokeBillingKeyAfterExpiry(Long userId) {
+        billingKeysService.findActiveByUserId(userId).ifPresent(billingKeys -> {
+            gatewayRegistry.getGateway(billingKeys.getProvider()).revoke(billingKeys.getProviderCredential());
+            billingKeysService.deleteBillingKeys(billingKeys.getId());
+        });
     }
 
     /**

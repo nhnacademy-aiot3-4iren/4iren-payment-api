@@ -4,6 +4,7 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.siren.sirenpaymentapi.domain.PaymentStatus;
 import com.siren.sirenpaymentapi.domain.entity.QPayments;
+import com.siren.sirenpaymentapi.dto.payments.PaymentHistoryResponse;
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -23,7 +24,7 @@ public class PaymentsRepositoryImpl implements PaymentsRepositoryCustom {
     public List<StuckPayment> findStuckInReady(LocalDateTime cutoff) {
         return queryFactory
                 .select(Projections.constructor(StuckPayment.class,
-                        payment.id, payment.subscription.id, payment.attemptedAt))
+                        payment.id, payment.subscription.id, payment.subscription.userId, payment.attemptedAt))
                 .from(payment)
                 .where(
                         payment.status.eq(PaymentStatus.READY),
@@ -43,5 +44,17 @@ public class PaymentsRepositoryImpl implements PaymentsRepositoryCustom {
                 )
                 .fetchFirst();
         return result != null;
+    }
+
+    @Override
+    public List<PaymentHistoryResponse> findByUserId(Long userId) {
+        return queryFactory
+                .select(Projections.constructor(PaymentHistoryResponse.class,
+                        payment.id, payment.amount, payment.status, payment.failureReason,
+                        payment.attemptedAt, payment.approvedAt))
+                .from(payment)
+                .where(payment.subscription.userId.eq(userId))
+                .orderBy(payment.attemptedAt.desc())
+                .fetch();
     }
 }

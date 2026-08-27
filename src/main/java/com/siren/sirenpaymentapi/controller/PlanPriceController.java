@@ -14,7 +14,7 @@ import java.util.List;
  * PlanPricesService.getCurrentPlanPrice(단일 plan)와 달리 전체 목록을 리턴한다.
  */
 @RestController
-@RequestMapping("/api/payments/plans")
+@RequestMapping("/api/payment/plans")
 @RequiredArgsConstructor
 public class PlanPriceController {
     private final PlanPricesService planPricesService;

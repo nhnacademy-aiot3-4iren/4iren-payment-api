@@ -3,6 +3,7 @@ package com.siren.sirenpaymentapi.controller.toss;
 import com.siren.sirenpaymentapi.domain.BillingKeyStatus;
 import com.siren.sirenpaymentapi.domain.Plan;
 import com.siren.sirenpaymentapi.domain.Provider;
+import com.siren.sirenpaymentapi.domain.RegistrationMode;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
@@ -11,6 +12,7 @@ import com.siren.sirenpaymentapi.dto.billing_keys.StartRegistrationResponse;
 import com.siren.sirenpaymentapi.dto.gateway.ConfirmedBillingKey;
 import com.siren.sirenpaymentapi.dto.gateway.RegistrationStart;
 import com.siren.sirenpaymentapi.dto.toss.PendingRegistration;
+import com.siren.sirenpaymentapi.exception.NotFoundBillingKeysException;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGateway;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
 import com.siren.sirenpaymentapi.service.BillingKeyRegistrationService;
@@ -84,12 +86,12 @@ class TossBillingKeyRegistrationControllerTest {
         when(gateway.confirmRegistration(callbackParams))
                 .thenReturn(new ConfirmedBillingKey("credential", "CARD"));
         when(pendingRegistrationCache.consume("billing-key-1"))
-                .thenReturn(Optional.of(new PendingRegistration(1L, Plan.MONTHLY, 29000L, 1L, "token-1")));
+                .thenReturn(Optional.of(new PendingRegistration(1L, Plan.MONTHLY, 29000L, 1L, "token-1", RegistrationMode.NEW)));
 
         ResponseEntity<Void> response = controller.handleCallback(callbackParams);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        verify(billingKeyRegistrationService).confirmRegistration(new ConfirmRegistrationCommand(
+        verify(billingKeyRegistrationService).confirmRegistrationAndCharge(new ConfirmRegistrationCommand(
                 1L, Provider.TOSS_PAY, "credential", "CARD", Plan.MONTHLY, 29000L, 1L, "token-1"));
     }
 
@@ -132,5 +134,44 @@ class TossBillingKeyRegistrationControllerTest {
         ResponseEntity<Void> response = controller.handleCallback(callbackParams);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    @Test
+    void startChangeBillingKeyReturnsRedirectUrl() {
+        when(billingKeyRegistrationService.verifyEligibleForBillingKeyChange(1L, Provider.TOSS_PAY))
+                .thenReturn(BillingKeys.builder().id(1L).status(BillingKeyStatus.ACTIVE).build());
+        when(gatewayRegistry.getGateway(Provider.TOSS_PAY)).thenReturn(gateway);
+        when(gateway.startRegistration(1L, "http://callback-url"))
+                .thenReturn(new RegistrationStart("http://checkout-uri", "billing-key-1", null));
+
+        StartRegistrationResponse response = controller.startChangeBillingKey(1L, "token-1");
+
+        assertEquals("http://checkout-uri", response.redirectUrl());
+        verify(pendingRegistrationCache).save(eq("billing-key-1"), any(PendingRegistration.class));
+    }
+
+    @Test
+    void startChangeBillingKeyThrowsWhenNoActiveBillingKey() {
+        when(billingKeyRegistrationService.verifyEligibleForBillingKeyChange(1L, Provider.TOSS_PAY))
+                .thenThrow(new NotFoundBillingKeysException("user=1의 활성 빌링키를 찾을 수 없습니다."));
+
+        assertThrows(NotFoundBillingKeysException.class, () -> controller.startChangeBillingKey(1L, "token-1"));
+        verifyNoInteractions(gatewayRegistry);
+    }
+
+    @Test
+    void handleCallbackRegistersPendingBillingKeyWhenModeIsChange() {
+        Map<String, String> callbackParams = Map.of("action", "ACTIVATED", "billingKey", "billing-key-1");
+        when(gatewayRegistry.getGateway(Provider.TOSS_PAY)).thenReturn(gateway);
+        when(gateway.confirmRegistration(callbackParams))
+                .thenReturn(new ConfirmedBillingKey("credential", "CARD"));
+        when(pendingRegistrationCache.consume("billing-key-1"))
+                .thenReturn(Optional.of(new PendingRegistration(1L, null, null, null, "token-1", RegistrationMode.CHANGE)));
+
+        ResponseEntity<Void> response = controller.handleCallback(callbackParams);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(billingKeysService).registerPendingBillingKey(1L, Provider.TOSS_PAY, "credential", "CARD");
+        verifyNoInteractions(billingKeyRegistrationService);
     }
 }

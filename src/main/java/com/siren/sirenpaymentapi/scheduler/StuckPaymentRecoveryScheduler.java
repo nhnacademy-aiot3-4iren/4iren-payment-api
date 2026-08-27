@@ -1,6 +1,7 @@
 package com.siren.sirenpaymentapi.scheduler;
 
 import com.siren.sirenpaymentapi.dto.payments.StuckPayment;
+import com.siren.sirenpaymentapi.service.BillingKeyRegistrationService;
 import com.siren.sirenpaymentapi.service.SubscriptionChargeService;
 import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class StuckPaymentRecoveryScheduler {
 
     private final PaymentsService paymentsService;
     private final SubscriptionChargeService subscriptionChargeService;
+    private final BillingKeyRegistrationService billingKeyRegistrationService;
 
     @Value("${payment.stuck-payment-recovery.threshold-minutes:5}")
     private int thresholdMinutes;
@@ -54,8 +56,11 @@ public class StuckPaymentRecoveryScheduler {
                     paymentsService.markFailed(payment.paymentId(),
                             "정합성 배치: 이후 재시도로 이미 해결된 stale 시도, READY 방치분 정리", null);
                 } else {
-                    subscriptionChargeService.recordFailure(payment.paymentId(), payment.subscriptionId(),
+                    boolean expired = subscriptionChargeService.recordFailure(payment.paymentId(), payment.subscriptionId(),
                             "정합성 배치: READY 상태로 " + thresholdMinutes + "분 넘게 방치되어 예외적 실패로 처리됨", null);
+                    if (expired) {
+                        billingKeyRegistrationService.revokeBillingKeyAfterExpiry(payment.userId());
+                    }
                 }
             } catch (Exception e) {
                 log.error("정합성 배치 처리 중 예외 발생 - paymentId={}", payment.paymentId(), e);
