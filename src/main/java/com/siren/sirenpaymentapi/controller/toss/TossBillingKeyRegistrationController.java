@@ -10,6 +10,8 @@ import com.siren.sirenpaymentapi.dto.gateway.ConfirmedBillingKey;
 import com.siren.sirenpaymentapi.dto.gateway.RegistrationStart;
 import com.siren.sirenpaymentapi.dto.toss.PendingRegistration;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
+import com.siren.sirenpaymentapi.security.RequireRole;
+import com.siren.sirenpaymentapi.security.Role;
 import com.siren.sirenpaymentapi.service.BillingKeyRegistrationService;
 import com.siren.sirenpaymentapi.service.basic_service.BillingKeysService;
 import com.siren.sirenpaymentapi.service.basic_service.PlanPricesService;
@@ -43,6 +45,7 @@ public class TossBillingKeyRegistrationController {
     private final PlanPricesService planPricesService;
     private final BillingKeysService billingKeysService;
 
+    @RequireRole(value = Role.NORMAL)
     @PostMapping("/registrations")
     public StartRegistrationResponse startRegistration(@Valid @RequestBody StartRegistrationRequest request,
                                                          @RequestHeader("X-USER-ID") Long userId,
@@ -69,6 +72,7 @@ public class TossBillingKeyRegistrationController {
      * 결제수단 변경 시작 - plan 정보 없이 PG 등록 플로우만 다시 태운다.
      * 콜백에서 mode=CHANGE로 구분해서 새 빌링키를 PENDING으로만 저장한다(즉시 교체 아님, 다음 청구 시점에 교체).
      */
+    @RequireRole(value = Role.OWNER)
     @PostMapping("/registrations/change")
     public StartRegistrationResponse startChangeBillingKey(@RequestHeader("X-USER-ID") Long userId,
                                                              @RequestHeader("X-TOKEN-ID") String tokenId) {

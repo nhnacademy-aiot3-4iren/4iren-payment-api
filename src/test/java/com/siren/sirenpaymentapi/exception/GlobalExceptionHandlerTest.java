@@ -63,4 +63,19 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
     }
+
+    @Test
+    void handleForbiddenReturns403() {
+        ResponseEntity<ErrorResponse> response = handler.handleForbidden(new ForbiddenException("접근 권한이 없습니다."));
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+    }
+
+    @Test
+    void handleInvalidRoleReturns401() {
+        ResponseEntity<ErrorResponse> response = handler.handleInvalidRole(
+                new InvalidRoleException("X-USER-ROLE 헤더가 없습니다."));
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
 }

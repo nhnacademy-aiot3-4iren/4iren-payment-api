@@ -27,6 +27,16 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.BAD_REQUEST, e);
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException e) {
+        return respond(HttpStatus.FORBIDDEN, e);
+    }
+
+    @ExceptionHandler(InvalidRoleException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRole(InvalidRoleException e) {
+        return respond(HttpStatus.UNAUTHORIZED, e);
+    }
+
     @ExceptionHandler({
             AlreadyBelongsToTeamException.class,
             SameProviderBillingKeyChangeException.class

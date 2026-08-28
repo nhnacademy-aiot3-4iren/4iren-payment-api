@@ -18,6 +18,7 @@
 5. **결제수단 변경은 in-place UPDATE 금지** — 새 row 등록(ACTIVE) 후 기존 row `DELETED` 처리, `subscriptions.billing_key_id` 재연결.
 6. **generic `updated_at` 없음** — 대신 의미 있는 개별 전이 컬럼(`canceled_at`/`expired_at`/`approved_at`/`deleted_at`) 사용.
 7. **정기결제는 "등록"과 "청구"가 별개 이벤트**. 등록 확정 전까지 `billing_keys` row 자체를 만들지 않음(Redis TTL로 상관관계만 임시 보관).
+8. **한 번이라도 배포된 Flyway 마이그레이션 파일은 절대 수정 금지.** DB 스키마 변경이 필요하면 기존 `V1__...sql`을 고치지 말고 반드시 새 `V2__...sql`, `V3__...sql`처럼 새 버전 파일을 추가할 것. 이미 적용된 파일을 고치면 체크섬이 달라져서 배포 시 `Migration checksum mismatch`로 앱이 아예 안 뜬다(2026-08-27 배포 장애 원인).
 
 ## 작업 방식 (Claude 협업 규칙)
 

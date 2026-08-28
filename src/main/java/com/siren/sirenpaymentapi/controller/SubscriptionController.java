@@ -1,5 +1,7 @@
 package com.siren.sirenpaymentapi.controller;
 
+import com.siren.sirenpaymentapi.security.RequireRole;
+import com.siren.sirenpaymentapi.security.Role;
 import com.siren.sirenpaymentapi.service.BillingKeyRegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/payment/subscriptions")
 @RequiredArgsConstructor
+@RequireRole(value = Role.OWNER)
 public class SubscriptionController {
     private final BillingKeyRegistrationService billingKeyRegistrationService;
 
