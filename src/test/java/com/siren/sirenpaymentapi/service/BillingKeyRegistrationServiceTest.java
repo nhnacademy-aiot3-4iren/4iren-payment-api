@@ -6,7 +6,6 @@ import com.siren.sirenpaymentapi.domain.Plan;
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.SubscriptionStatus;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
-import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
 import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckRequest;
@@ -14,6 +13,7 @@ import com.siren.sirenpaymentapi.dto.core.TeamCheckResponse;
 import com.siren.sirenpaymentapi.dto.gateway.ActiveBillingKey;
 import com.siren.sirenpaymentapi.dto.gateway.ChargeResult;
 import com.siren.sirenpaymentapi.dto.payments.PreparedCharge;
+import com.siren.sirenpaymentapi.dto.subscriptions.BillingTarget;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.AlreadyBelongsToTeamException;
 import com.siren.sirenpaymentapi.exception.InitialChargeFailedException;
@@ -22,9 +22,9 @@ import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
 import com.siren.sirenpaymentapi.exception.SameProviderBillingKeyChangeException;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGateway;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
+import com.siren.sirenpaymentapi.mail.MailEventPublisher;
 import com.siren.sirenpaymentapi.service.basic_service.BillingKeysService;
 import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
-import com.siren.sirenpaymentapi.service.basic_service.PlanPricesService;
 import com.siren.sirenpaymentapi.service.basic_service.SubscriptionsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,9 +48,6 @@ class BillingKeyRegistrationServiceTest {
     private SubscriptionsService subscriptionsService;
 
     @Mock
-    private PlanPricesService planPricesService;
-
-    @Mock
     private PaymentsService paymentsService;
 
     @Mock
@@ -66,7 +63,13 @@ class BillingKeyRegistrationServiceTest {
     private CoreApiClient coreApiClient;
 
     @Mock
+    private MailEventPublisher mailEventPublisher;
+
+    @Mock
     private RecurringPaymentGateway gateway;
+
+    @Mock
+    private RegistrationConfirmationService registrationConfirmationService;
 
     @InjectMocks
     private BillingKeyRegistrationService billingKeyRegistrationService;
@@ -100,56 +103,29 @@ class BillingKeyRegistrationServiceTest {
     }
 
     @Test
-    void confirmRegistrationDoesNotPublishOwnerEvent() {
-        BillingKeys billingKeys = BillingKeys.builder().id(1L).build();
-        PlanPrices planPrice = PlanPrices.builder().id(1L).build();
-        Subscriptions subscription = Subscriptions.builder().id(10L).build();
-        when(billingKeysService.registerBillingKeys(1L, Provider.TOSS_PAY, "credential", "CARD"))
-                .thenReturn(billingKeys);
-        when(planPricesService.getReference(1L)).thenReturn(planPrice);
-        when(subscriptionsService.registerSubscription(1L, billingKeys, planPrice, Plan.MONTHLY, 29000L))
-                .thenReturn(subscription);
-
-        var target = billingKeyRegistrationService.confirmRegistration(new ConfirmRegistrationCommand(
-                1L, Provider.TOSS_PAY, "credential", "CARD", Plan.MONTHLY, 29000L, 1L, "token-1"));
-
-        assertEquals(10L, target.subscriptionId());
-        assertEquals(29000L, target.amount());
-        verifyNoInteractions(roleChangeEventPublisher);
-    }
-
-    @Test
     void confirmRegistrationAndChargePublishesOwnerEventWhenChargeSucceeds() {
-        BillingKeys billingKeys = BillingKeys.builder().id(1L).build();
-        PlanPrices planPrice = PlanPrices.builder().id(1L).build();
         Subscriptions subscription = Subscriptions.builder().id(10L).build();
-        when(billingKeysService.registerBillingKeys(1L, Provider.TOSS_PAY, "credential", "CARD"))
-                .thenReturn(billingKeys);
-        when(planPricesService.getReference(1L)).thenReturn(planPrice);
-        when(subscriptionsService.registerSubscription(1L, billingKeys, planPrice, Plan.MONTHLY, 29000L))
-                .thenReturn(subscription);
+        BillingTarget target = new BillingTarget(10L, 1L, Provider.TOSS_PAY, "credential", 29000L, false);
+        when(registrationConfirmationService.confirmRegistration(any())).thenReturn(target);
         when(paymentsService.prepareCharge(10L, 29000L)).thenReturn(new PreparedCharge(100L, "order-1"));
         when(gatewayRegistry.getGateway(Provider.TOSS_PAY)).thenReturn(gateway);
         when(gateway.charge("credential", 29000L, "order-1"))
                 .thenReturn(ChargeResult.success("txn-1", "pay-1", "raw"));
+        when(subscriptionsService.getById(10L)).thenReturn(subscription);
 
         billingKeyRegistrationService.confirmRegistrationAndCharge(new ConfirmRegistrationCommand(
                 1L, Provider.TOSS_PAY, "credential", "CARD", Plan.MONTHLY, 29000L, 1L, "token-1"));
 
         verify(subscriptionChargeService).recordInitialChargeSuccess(100L, "txn-1", "pay-1", "raw");
         verify(roleChangeEventPublisher).requestRoleChange(1L, RoleChangeRequested.OWNER, "token-1");
+        verify(mailEventPublisher).notify(eq(1L), any());
     }
 
     @Test
     void confirmRegistrationAndChargeFailsRegistrationWhenChargeFails() {
         BillingKeys billingKeys = BillingKeys.builder().id(1L).build();
-        PlanPrices planPrice = PlanPrices.builder().id(1L).build();
-        Subscriptions subscription = Subscriptions.builder().id(10L).build();
-        when(billingKeysService.registerBillingKeys(1L, Provider.TOSS_PAY, "credential", "CARD"))
-                .thenReturn(billingKeys);
-        when(planPricesService.getReference(1L)).thenReturn(planPrice);
-        when(subscriptionsService.registerSubscription(1L, billingKeys, planPrice, Plan.MONTHLY, 29000L))
-                .thenReturn(subscription);
+        BillingTarget target = new BillingTarget(10L, 1L, Provider.TOSS_PAY, "credential", 29000L, false);
+        when(registrationConfirmationService.confirmRegistration(any())).thenReturn(target);
         when(paymentsService.prepareCharge(10L, 29000L)).thenReturn(new PreparedCharge(100L, "order-1"));
         when(gatewayRegistry.getGateway(Provider.TOSS_PAY)).thenReturn(gateway);
         when(gateway.charge("credential", 29000L, "order-1"))

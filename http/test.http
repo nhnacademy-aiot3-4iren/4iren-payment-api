@@ -11,7 +11,7 @@ GET http://localhost:8080/api/payment/plans
 ### userId/tokenId는 이제 body가 아니라 게이트웨이가 실어주는 헤더에서 읽음(X-USER-ID/X-TOKEN-ID).
 POST http://localhost:8115/api/payment/billing-keys/kakao/registrations
 Content-Type: application/json
-X-USER-ID: 55555
+X-USER-ID: 3
 X-USER-ROLE: NORMAL
 X-TOKEN-ID: test-token-55555
 
@@ -35,7 +35,7 @@ GET http://localhost:8115/api/payment/billing-keys/kakao/callback?orderId=ae7b7a
 ### userId/tokenId는 이제 body가 아니라 헤더에서 읽음.
 POST http://localhost:8115/api/payment/billing-keys/toss/registrations
 Content-Type: application/json
-X-USER-ID: 66666
+X-USER-ID: 3
 X-USER-ROLE: NORMAL
 X-TOKEN-ID: test-token-66666
 
@@ -72,6 +72,7 @@ X-USER-ID: 55555
 ### 11. 토스 쪽(userId=66666) 해지
 DELETE http://localhost:8115/api/payment/subscriptions
 X-USER-ID: 3
+X-USER-ROLE: OWNER
 
 ### 12. 해지 결과 DB 확인 - billing_keys.status=DELETED(+deleted_at), subscriptions.status=CANCELED(+canceled_at)
 ### docker exec notification-mysql mysql -uroot -plocal payment_db -e "SELECT user_id, status, deleted_at FROM billing_keys WHERE user_id IN (55555,66666); SELECT user_id, status, canceled_at FROM subscriptions WHERE user_id IN (55555,66666);"

@@ -1,16 +1,25 @@
 package com.siren.sirenpaymentapi.service;
 
+import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.mail.PaymentSuccessMailContext;
+import com.siren.sirenpaymentapi.mail.MailEventPublisher;
 import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
 import com.siren.sirenpaymentapi.service.basic_service.SubscriptionsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 @Service
 @RequiredArgsConstructor
 public class SubscriptionChargeService {
+    private static final ZoneId ZONE_ID = ZoneId.of("Asia/Seoul");
+
     private final PaymentsService paymentsService;
     private final SubscriptionsService subscriptionsService;
+    private final MailEventPublisher mailEventPublisher;
 
     /**
      * PG 청구가 성공할때
@@ -22,11 +31,13 @@ public class SubscriptionChargeService {
                               String providerTransactionId, String payToken, String rawResponse) {
         paymentsService.markSucceeded(paymentId, providerTransactionId, payToken, rawResponse);
 
-        if (wasRecovering) {
-            subscriptionsService.recoverActive(subscriptionId);
-        } else {
-            subscriptionsService.advanceBillingCycle(subscriptionId);
-        }
+        Subscriptions subscriptions = wasRecovering
+                ? subscriptionsService.recoverActive(subscriptionId)
+                : subscriptionsService.advanceBillingCycle(subscriptionId);
+
+        mailEventPublisher.notify(subscriptions.getUserId(), new PaymentSuccessMailContext(
+                subscriptions.getPlan().name(), subscriptions.getAmount(), LocalDateTime.now(ZONE_ID),
+                subscriptions.getBillingKey().getMaskedInfo(), subscriptions.getNextBillingDate()));
     }
 
     /**
@@ -38,7 +49,7 @@ public class SubscriptionChargeService {
     @Transactional
     public boolean recordFailure(Long paymentId, Long subscriptionId, String failureReason, String rawResponse) {
         paymentsService.markFailed(paymentId, failureReason, rawResponse);
-        return subscriptionsService.markPastDue(subscriptionId);
+        return subscriptionsService.markPastDue(subscriptionId, failureReason);
     }
 
     /**

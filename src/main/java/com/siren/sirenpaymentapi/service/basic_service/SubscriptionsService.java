@@ -5,9 +5,14 @@ import com.siren.sirenpaymentapi.domain.SubscriptionStatus;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.mail.CanceledMailContext;
+import com.siren.sirenpaymentapi.dto.mail.ExpiredMailContext;
+import com.siren.sirenpaymentapi.dto.mail.PastDueMailContext;
+import com.siren.sirenpaymentapi.dto.mail.SubEndedMailContext;
 import com.siren.sirenpaymentapi.dto.subscriptions.BillingTarget;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
+import com.siren.sirenpaymentapi.mail.MailEventPublisher;
 import com.siren.sirenpaymentapi.repository.SubscriptionsRepository;
 import com.siren.sirenpaymentapi.service.RoleChangeEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +33,7 @@ public class SubscriptionsService {
     private static final ZoneId ZONE_ID = ZoneId.of("Asia/Seoul");
     private final SubscriptionsRepository subscriptionsRepository;
     private final RoleChangeEventPublisher roleChangeEventPublisher;
+    private final MailEventPublisher mailEventPublisher;
 
     // 재시도 3번까지만(매일 시도) config로 외부화하되 지금은 기본값만 씀(config-repo 반영 안 함)
     @Value("${payment.dunning.max-retry-count:3}")
@@ -36,6 +42,13 @@ public class SubscriptionsService {
     // 토스 REMOVED 콜백 처리 시 userId로 지금 활성화된 구독을 찾기 위해 사용
     public Optional<Subscriptions> findActiveByUserId(Long userId) {
         return subscriptionsRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE);
+    }
+
+    // 가입 직후 첫 청구 성공 메일에 nextBillingDate를 실어보내려는 단순 조회용(registerSubscription이 계산한 값 재사용)
+    @Transactional(readOnly = true)
+    public Subscriptions getById(Long subscriptionId) {
+        return subscriptionsRepository.findById(subscriptionId)
+                .orElseThrow(() -> new NotFoundSubscriptionException(subscriptionId));
     }
 
     // 등록 시작 컨트롤러가 호출 - 첫결제(팀 소속 여부를 Core에 확인해야 함)인지 재결제(스킵)인지 구분
@@ -83,8 +96,10 @@ public class SubscriptionsService {
      * currentPeriodEnd/nextBillingDate를 다음 주기로 진행시킨다.
      */
     @Transactional
-    public void advanceBillingCycle(Long subscriptionId){
-        findLocked(subscriptionId).advanceBillingCycle();
+    public Subscriptions advanceBillingCycle(Long subscriptionId){
+        Subscriptions subscriptions = findLocked(subscriptionId);
+        subscriptions.advanceBillingCycle();
+        return subscriptions;
     }
 
     /**
@@ -92,8 +107,10 @@ public class SubscriptionsService {
      * status를 ACTIVE로 되돌리고 retryCount를 0으로 리셋한 뒤 다음 주기를 계산한다.
      */
     @Transactional
-    public void recoverActive(Long subscriptionId){
-        findLocked(subscriptionId).recoverActive();
+    public Subscriptions recoverActive(Long subscriptionId){
+        Subscriptions subscriptions = findLocked(subscriptionId);
+        subscriptions.recoverActive();
+        return subscriptions;
     }
 
     /**
@@ -102,13 +119,16 @@ public class SubscriptionsService {
      * 아니면 PAST_DUE로 전이시키고 retryCount를 1 증가(role/Account엔 PAST_DUE 자체는 아직 영향 없음).
      */
     @Transactional
-    public boolean markPastDue(Long subscriptionId){
+    public boolean markPastDue(Long subscriptionId, String failureReason){
         Subscriptions subscriptions = findLocked(subscriptionId);
         if (subscriptions.getRetryCount() >= maxRetryCount) {
-            expireAndPublish(subscriptions);
+            expireAndPublish(subscriptions, failureReason);
             return true;
         }
         subscriptions.markPastDue();
+        mailEventPublisher.notify(subscriptions.getUserId(), new PastDueMailContext(
+                subscriptions.getPlan().name(), LocalDateTime.now(ZONE_ID), subscriptions.getNextBillingDate(),
+                subscriptions.getRetryCount(), maxRetryCount, failureReason));
         return false;
     }
 
@@ -120,12 +140,14 @@ public class SubscriptionsService {
      */
     @Transactional
     public void markExpired(Long subscriptionId){
-        expireAndPublish(findLocked(subscriptionId));
+        expireAndPublish(findLocked(subscriptionId), "결제 실패로 인한 만료");
     }
 
-    private void expireAndPublish(Subscriptions subscriptions) {
+    private void expireAndPublish(Subscriptions subscriptions, String failureReason) {
         subscriptions.markExpired();
         roleChangeEventPublisher.requestRoleChange(subscriptions.getUserId(), RoleChangeRequested.NORMAL, null);
+        mailEventPublisher.notify(subscriptions.getUserId(), new ExpiredMailContext(
+                subscriptions.getPlan().name(), LocalDateTime.now(ZONE_ID), failureReason));
     }
 
     /**
@@ -143,7 +165,10 @@ public class SubscriptionsService {
      */
     @Transactional
     public void markCanceled(Long subscriptionId){
-        findLocked(subscriptionId).markCanceled();
+        Subscriptions subscriptions = findLocked(subscriptionId);
+        subscriptions.markCanceled();
+        mailEventPublisher.notify(subscriptions.getUserId(), new CanceledMailContext(
+                subscriptions.getPlan().name(), LocalDateTime.now(ZONE_ID), subscriptions.getCurrentPeriodEnd()));
     }
 
     /**
@@ -158,6 +183,8 @@ public class SubscriptionsService {
         Subscriptions subscriptions = findLocked(subscriptionId);
         subscriptions.markRoleDowngraded();
         roleChangeEventPublisher.requestRoleChange(subscriptions.getUserId(), RoleChangeRequested.NORMAL, null);
+        mailEventPublisher.notify(subscriptions.getUserId(), new SubEndedMailContext(
+                subscriptions.getPlan().name(), LocalDateTime.now(ZONE_ID)));
     }
 
     /**
