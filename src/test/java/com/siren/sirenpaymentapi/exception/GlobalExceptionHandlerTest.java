@@ -57,6 +57,13 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleServiceUnavailableReturns503ForAccountApi() {
+        ResponseEntity<ErrorResponse> response = handler.handleServiceUnavailable(new AccountApiUnavailableException(1L));
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+    }
+
+    @Test
     void handleInternalReturns500() {
         ResponseEntity<ErrorResponse> response = handler.handleInternal(
                 new JsonConversionException("파싱 실패", new RuntimeException()));

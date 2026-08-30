@@ -50,11 +50,10 @@ public class KakaoBillingKeyRegistrationController {
     public StartRegistrationResponse startRegistration(@Valid @RequestBody StartRegistrationRequest request,
                                                          @RequestHeader("X-USER-ID") Long userId,
                                                          @RequestHeader("X-TOKEN-ID") String tokenId) {
-        // userId도 클라이언트가 보낸 값을 안 믿는다 - 게이트웨이가 인증 후 실어주는 X-USER-ID 헤더에서 읽는다.
         // 첫결제인데 이미 팀에 속해있으면 여기서 예외로 막힘(재결제는 내부적으로 스킵됨)
         billingKeyRegistrationService.verifyEligibleForRegistration(userId);
 
-        // 가격도 마찬가지로 클라이언트가 보낸 값을 안 믿고 서버가 직접 정한다 - 등록 시작 시점 가격으로 확정(가격 고정/grandfathering).
+        // 등록 시작 시점 가격으로 확정(가격 고정/grandfathering).
         PlanPrices currentPrice = planPricesService.getCurrentPlanPrice(request.plan());
 
         RegistrationStart start = gatewayRegistry.getGateway(Provider.KAKAO_PAY)

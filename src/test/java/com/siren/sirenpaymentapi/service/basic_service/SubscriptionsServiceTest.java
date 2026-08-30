@@ -7,6 +7,7 @@ import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
+import com.siren.sirenpaymentapi.mail.MailEventPublisher;
 import com.siren.sirenpaymentapi.repository.SubscriptionsRepository;
 import com.siren.sirenpaymentapi.service.RoleChangeEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,9 @@ class SubscriptionsServiceTest {
 
     @Mock
     private RoleChangeEventPublisher roleChangeEventPublisher;
+
+    @Mock
+    private MailEventPublisher mailEventPublisher;
 
     @InjectMocks
     private SubscriptionsService subscriptionsService;
@@ -132,11 +136,12 @@ class SubscriptionsServiceTest {
         Subscriptions subscription = newActiveSubscription();
         when(subscriptionsRepository.findLockedById(1L)).thenReturn(Optional.of(subscription));
 
-        boolean expired = subscriptionsService.markPastDue(1L);
+        boolean expired = subscriptionsService.markPastDue(1L, "실패 사유");
 
         assertEquals(SubscriptionStatus.PAST_DUE, subscription.getStatus());
         assertFalse(expired);
         verify(roleChangeEventPublisher, never()).requestRoleChange(any(), any(), any());
+        verify(mailEventPublisher).notify(eq(1L), any());
     }
 
     @Test
@@ -153,7 +158,7 @@ class SubscriptionsServiceTest {
                 .build();
         when(subscriptionsRepository.findLockedById(1L)).thenReturn(Optional.of(subscription));
 
-        boolean expired = subscriptionsService.markPastDue(1L);
+        boolean expired = subscriptionsService.markPastDue(1L, "실패 사유");
 
         assertEquals(SubscriptionStatus.EXPIRED, subscription.getStatus());
         assertTrue(expired);

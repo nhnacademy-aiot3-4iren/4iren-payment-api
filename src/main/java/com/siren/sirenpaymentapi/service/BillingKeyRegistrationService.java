@@ -3,13 +3,13 @@ package com.siren.sirenpaymentapi.service;
 import com.siren.sirenpaymentapi.client.CoreApiClient;
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
-import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
 import com.siren.sirenpaymentapi.dto.billing_keys.ConfirmRegistrationCommand;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckRequest;
 import com.siren.sirenpaymentapi.dto.core.TeamCheckResponse;
 import com.siren.sirenpaymentapi.dto.gateway.ActiveBillingKey;
 import com.siren.sirenpaymentapi.dto.gateway.ChargeResult;
+import com.siren.sirenpaymentapi.dto.mail.PaymentSuccessMailContext;
 import com.siren.sirenpaymentapi.dto.payments.PreparedCharge;
 import com.siren.sirenpaymentapi.dto.subscriptions.BillingTarget;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
@@ -19,24 +19,35 @@ import com.siren.sirenpaymentapi.exception.NotFoundBillingKeysException;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
 import com.siren.sirenpaymentapi.exception.SameProviderBillingKeyChangeException;
 import com.siren.sirenpaymentapi.gateway.RecurringPaymentGatewayRegistry;
+import com.siren.sirenpaymentapi.mail.MailEventPublisher;
 import com.siren.sirenpaymentapi.service.basic_service.BillingKeysService;
 import com.siren.sirenpaymentapi.service.basic_service.PaymentsService;
-import com.siren.sirenpaymentapi.service.basic_service.PlanPricesService;
 import com.siren.sirenpaymentapi.service.basic_service.SubscriptionsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 @Service
 @RequiredArgsConstructor
 public class BillingKeyRegistrationService {
+    private static final ZoneId ZONE_ID = ZoneId.of("Asia/Seoul");
+    private static final String USER_PREFIX = "user: ";
+
+    // confirmRegistration은 이 클래스 안에 안 두고 별도 빈(RegistrationConfirmationService)으로 분리함 -
+    // self-invocation(this로 같은 클래스 내 호출) 시 @Transactional이 Spring AOP 프록시를 안 거쳐서
+    // 무시되는 문제를 self-injection 트릭 대신 클래스 분리로 해결.
+    private final RegistrationConfirmationService registrationConfirmationService;
+
     private final BillingKeysService billingKeysService;
     private final SubscriptionsService subscriptionsService;
-    private final PlanPricesService planPricesService;
     private final PaymentsService paymentsService;
     private final SubscriptionChargeService subscriptionChargeService;
     private final RecurringPaymentGatewayRegistry gatewayRegistry;
     private final RoleChangeEventPublisher roleChangeEventPublisher;
+    private final MailEventPublisher mailEventPublisher;
     private final CoreApiClient coreApiClient;
 
     /**
@@ -56,25 +67,6 @@ public class BillingKeyRegistrationService {
     }
 
     /**
-     * PG 등록(인증) 절차가 성공으로 확정된 시점에 호출
-     * 빌링키 생성 + 구독 생성을 한 트랜잭션으로 묶는다 - 최초 가입 흐름의 진입점.
-     * planPriceId는 등록 시작 시점에 확정된 가격 row 참조(가격 고정/grandfathering, PendingRegistration에서 옴).
-     * OWNER 승격은 여기서 하지 않는다 - confirmRegistrationAndCharge가 첫 청구 성공을 확인한 뒤에 한다.
-     * 반환값은 방금 만든 구독을 바로 청구하는 데 필요한 스칼라만 담은 BillingTarget(트랜잭션 밖으로 detached
-     * 엔티티를 넘기면 LazyInitializationException이 나므로).
-     */
-    @Transactional
-    public BillingTarget confirmRegistration(ConfirmRegistrationCommand command) {
-        BillingKeys billingKeys = billingKeysService.registerBillingKeys(
-                command.userId(), command.provider(), command.providerCredential(), command.maskedInfo());
-        PlanPrices planPrice = planPricesService.getReference(command.planPriceId());
-        Subscriptions subscription = subscriptionsService.registerSubscription(
-                command.userId(), billingKeys, planPrice, command.plan(), command.amount());
-        return new BillingTarget(subscription.getId(), command.userId(), command.provider(),
-                command.providerCredential(), command.amount(), false);
-    }
-
-    /**
      * 등록 콜백 컨트롤러(Toss/Kakao)가 실제로 호출하는 진입점 - 빌링키/구독 생성 + 가입 직후 첫 청구를
      * 한 흐름으로 묶는다. PG 호출은 트랜잭션 밖에서 한다(SubscriptionChargeCoordinator와 같은 이유).
      * 첫 청구가 성공해야만 OWNER로 승격한다 - 실패하면 등록 자체를 실패 처리(구독 EXPIRED, 빌링키 PG에서도
@@ -82,7 +74,7 @@ public class BillingKeyRegistrationService {
      * 스케줄을 며칠씩 기다릴 이유가 없음).
      */
     public void confirmRegistrationAndCharge(ConfirmRegistrationCommand command) {
-        BillingTarget target = confirmRegistration(command);
+        BillingTarget target = registrationConfirmationService.confirmRegistration(command);
 
         PreparedCharge prepared = paymentsService.prepareCharge(target.subscriptionId(), target.amount());
         ChargeResult result = gatewayRegistry.getGateway(target.provider())
@@ -92,6 +84,11 @@ public class BillingKeyRegistrationService {
             subscriptionChargeService.recordInitialChargeSuccess(
                     prepared.paymentId(), result.providerTransactionId(), result.payToken(), result.rawResponse());
             roleChangeEventPublisher.requestRoleChange(command.userId(), RoleChangeRequested.OWNER, command.tokenId());
+
+            Subscriptions subscription = subscriptionsService.getById(target.subscriptionId());
+            mailEventPublisher.notify(command.userId(), new PaymentSuccessMailContext(
+                    command.plan().name(), command.amount(), LocalDateTime.now(ZONE_ID),
+                    command.maskedInfo(), subscription.getNextBillingDate()));
             return;
         }
 
@@ -122,7 +119,7 @@ public class BillingKeyRegistrationService {
      */
     public BillingKeys verifyEligibleForBillingKeyChange(Long userId, Provider newProvider) {
         BillingKeys active = billingKeysService.findActiveByUserId(userId)
-                .orElseThrow(() -> new NotFoundBillingKeysException("user=" + userId + "의 활성 빌링키를 찾을 수 없습니다."));
+                .orElseThrow(() -> new NotFoundBillingKeysException(USER_PREFIX + userId + "의 활성 빌링키를 찾을 수 없습니다."));
         if (active.getProvider() == newProvider) {
             throw new SameProviderBillingKeyChangeException(newProvider);
         }
@@ -184,9 +181,9 @@ public class BillingKeyRegistrationService {
     @Transactional
     public void cancelSubscription(Long userId) {
         BillingKeys billingKeys = billingKeysService.findActiveByUserId(userId)
-                .orElseThrow(() -> new NotFoundBillingKeysException("user=" + userId + "의 활성 빌링키를 찾을 수 없습니다."));
+                .orElseThrow(() -> new NotFoundBillingKeysException(USER_PREFIX + userId + "의 활성 빌링키를 찾을 수 없습니다."));
         Subscriptions subscription = subscriptionsService.findActiveByUserId(userId)
-                .orElseThrow(() -> new NotFoundSubscriptionException("user=" + userId + "의 활성 구독을 찾을 수 없습니다."));
+                .orElseThrow(() -> new NotFoundSubscriptionException(USER_PREFIX + userId + "의 활성 구독을 찾을 수 없습니다."));
 
         gatewayRegistry.getGateway(billingKeys.getProvider()).revoke(billingKeys.getProviderCredential());
 
