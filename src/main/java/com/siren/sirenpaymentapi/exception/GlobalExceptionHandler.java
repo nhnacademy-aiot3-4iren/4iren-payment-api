@@ -56,8 +56,11 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.BAD_GATEWAY, e);
     }
 
-    @ExceptionHandler(CoreApiUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleServiceUnavailable(CoreApiUnavailableException e) {
+    @ExceptionHandler({
+            CoreApiUnavailableException.class,
+            AccountApiUnavailableException.class
+    })
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(RuntimeException e) {
         return respond(HttpStatus.SERVICE_UNAVAILABLE, e);
     }
 

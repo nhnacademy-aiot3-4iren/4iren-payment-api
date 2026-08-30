@@ -14,6 +14,11 @@ import java.util.Arrays;
 @Component
 public class RoleCheckInterceptor implements HandlerInterceptor {
     public static final String ROLE_HEADER="X-USER-ROLE";
+
+    // 항상 true거나 예외를 던지는 건 의도된 설계임 - 권한 없음/헤더 이상은 return false가 아니라
+    // ForbiddenException/InvalidRoleException을 던져서 GlobalExceptionHandler가 403/401로 매핑하게 함
+    // (조용히 다음 필터로 넘어가는 return false보다 클라이언트에 이유를 알려줄 수 있어서 이 방식을 유지함).
+    @SuppressWarnings("java:S3516")
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if(!(handler instanceof HandlerMethod hm)) {
