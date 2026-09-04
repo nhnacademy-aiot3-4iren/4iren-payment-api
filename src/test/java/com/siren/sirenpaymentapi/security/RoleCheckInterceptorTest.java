@@ -30,13 +30,11 @@ class RoleCheckInterceptorTest {
 
     @RequireRole(Role.OWNER)
     private static class OwnerOnly {
-        void handle() {
-        }
+
     }
 
     private static class NoAnnotation {
-        void handle() {
-        }
+
     }
 
     @Test
@@ -68,7 +66,7 @@ class RoleCheckInterceptorTest {
     }
 
     @Test
-    void mismatchedRoleThrowsForbidden() throws Exception {
+    void mismatchedRoleThrowsForbidden() {
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(null);
         doReturn(OwnerOnly.class).when(handlerMethod).getBeanType();
         when(request.getHeader(RoleCheckInterceptor.ROLE_HEADER)).thenReturn("NORMAL");
@@ -78,7 +76,7 @@ class RoleCheckInterceptorTest {
     }
 
     @Test
-    void missingHeaderThrowsInvalidRole() throws Exception {
+    void missingHeaderThrowsInvalidRole() {
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(null);
         doReturn(OwnerOnly.class).when(handlerMethod).getBeanType();
         when(request.getHeader(RoleCheckInterceptor.ROLE_HEADER)).thenReturn(null);
@@ -88,7 +86,7 @@ class RoleCheckInterceptorTest {
     }
 
     @Test
-    void unknownRoleValueThrowsInvalidRole() throws Exception {
+    void unknownRoleValueThrowsInvalidRole(){
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(null);
         doReturn(OwnerOnly.class).when(handlerMethod).getBeanType();
         when(request.getHeader(RoleCheckInterceptor.ROLE_HEADER)).thenReturn("SUPER_ADMIN");

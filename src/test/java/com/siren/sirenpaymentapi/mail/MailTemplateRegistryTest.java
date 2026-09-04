@@ -25,7 +25,7 @@ class MailTemplateRegistryTest {
         MailTemplate<MailContext> template = mock(MailTemplate.class);
         when(template.getMailCategory()).thenReturn(MailCategory.PAY_SUCCESS);
         when(template.getMailContent(any())).thenReturn(Optional.of("<html>ok</html>"));
-        MailTemplateRegistry registry = new MailTemplateRegistry(List.of(template));
+        MailTemplateRegistry registry = new MailTemplateRegistry(List.<MailTemplate<?>>of(template));
 
         assertEquals("<html>ok</html>", registry.dispatch(context));
     }
@@ -43,7 +43,7 @@ class MailTemplateRegistryTest {
         MailTemplate<MailContext> template = mock(MailTemplate.class);
         when(template.getMailCategory()).thenReturn(MailCategory.PAY_SUCCESS);
         when(template.getMailContent(any())).thenReturn(Optional.empty());
-        MailTemplateRegistry registry = new MailTemplateRegistry(List.of(template));
+        MailTemplateRegistry registry = new MailTemplateRegistry(List.<MailTemplate<?>>of(template));
 
         assertNull(registry.dispatch(context));
     }
