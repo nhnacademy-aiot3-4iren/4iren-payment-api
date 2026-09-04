@@ -132,9 +132,11 @@ class BillingKeyRegistrationServiceTest {
                 .thenReturn(ChargeResult.failure("카드 한도 초과", "raw"));
         when(billingKeysService.findActiveByUserId(1L)).thenReturn(Optional.of(billingKeys));
 
+        ConfirmRegistrationCommand command = new ConfirmRegistrationCommand(
+                1L, Provider.TOSS_PAY, "credential", "CARD", Plan.MONTHLY, 29000L, 1L, "token-1");
+
         assertThrows(InitialChargeFailedException.class, () ->
-                billingKeyRegistrationService.confirmRegistrationAndCharge(new ConfirmRegistrationCommand(
-                        1L, Provider.TOSS_PAY, "credential", "CARD", Plan.MONTHLY, 29000L, 1L, "token-1")));
+                billingKeyRegistrationService.confirmRegistrationAndCharge(command));
 
         verify(subscriptionChargeService).recordInitialChargeFailure(100L, 10L, "카드 한도 초과", "raw");
         verify(gateway).revoke("credential");
