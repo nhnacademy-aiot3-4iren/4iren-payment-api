@@ -19,4 +19,8 @@ public interface SubscriptionsRepository extends JpaRepository<Subscriptions, Lo
 
     // 첫결제/재결제 구분용 - 이 userId로 시도한 구독 이력이 하나라도 있는지(상태 무관)
     boolean existsByUserId(Long userId);
+
+    // "현재 이용 중인 요금제" 조회용 - ACTIVE/PAST_DUE/CANCELED(해지 접수했지만 기간 안 끝남) 상태 무관하게
+    // 최신 구독 1건. OWNER만 호출 가능한 엔드포인트라 EXPIRED로 이미 강등된 유저는 애초에 못 들어옴.
+    Optional<Subscriptions> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
 }
