@@ -10,6 +10,7 @@ import com.siren.sirenpaymentapi.dto.mail.ExpiredMailContext;
 import com.siren.sirenpaymentapi.dto.mail.PastDueMailContext;
 import com.siren.sirenpaymentapi.dto.mail.SubEndedMailContext;
 import com.siren.sirenpaymentapi.dto.subscriptions.BillingTarget;
+import com.siren.sirenpaymentapi.dto.subscriptions.SubscriptionResponse;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
 import com.siren.sirenpaymentapi.mail.MailEventPublisher;
@@ -42,6 +43,16 @@ public class SubscriptionsService {
     // 토스 REMOVED 콜백 처리 시 userId로 지금 활성화된 구독을 찾기 위해 사용
     public Optional<Subscriptions> findActiveByUserId(Long userId) {
         return subscriptionsRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE);
+    }
+
+    // "현재 이용 중인 요금제" 조회용 - findActiveByUserId와 달리 ACTIVE로 안 좁힘(PAST_DUE/CANCELED도 조회돼야 함)
+    public SubscriptionResponse findLatestByUserId(Long userId) {
+        Subscriptions subscription = subscriptionsRepository.findFirstByUserIdOrderByCreatedAtDesc(userId)
+                .orElseThrow(() -> new NotFoundSubscriptionException("user: " + userId + "의 구독을 찾을 수 없습니다."));
+
+        return new SubscriptionResponse(
+                subscription.getPlan(), subscription.getAmount(), subscription.getStatus(),
+                subscription.getCurrentPeriodEnd(), subscription.getNextBillingDate());
     }
 
     // 가입 직후 첫 청구 성공 메일에 nextBillingDate를 실어보내려는 단순 조회용(registerSubscription이 계산한 값 재사용)

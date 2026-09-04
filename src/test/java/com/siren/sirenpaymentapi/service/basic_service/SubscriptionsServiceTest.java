@@ -5,6 +5,7 @@ import com.siren.sirenpaymentapi.domain.SubscriptionStatus;
 import com.siren.sirenpaymentapi.domain.entity.BillingKeys;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
 import com.siren.sirenpaymentapi.domain.entity.Subscriptions;
+import com.siren.sirenpaymentapi.dto.subscriptions.SubscriptionResponse;
 import com.siren.sirenpaymentapi.event.RoleChangeRequested;
 import com.siren.sirenpaymentapi.exception.NotFoundSubscriptionException;
 import com.siren.sirenpaymentapi.mail.MailEventPublisher;
@@ -68,6 +69,28 @@ class SubscriptionsServiceTest {
         Optional<Subscriptions> result = subscriptionsService.findActiveByUserId(1L);
 
         assertTrue(result.isPresent());
+    }
+
+    @Test
+    void findLatestByUserIdMapsSubscriptionToResponse() {
+        Subscriptions subscription = newActiveSubscription();
+        when(subscriptionsRepository.findFirstByUserIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(subscription));
+
+        SubscriptionResponse result = subscriptionsService.findLatestByUserId(1L);
+
+        assertEquals(Plan.MONTHLY, result.plan());
+        assertEquals(29000L, result.amount());
+        assertEquals(SubscriptionStatus.ACTIVE, result.status());
+        assertEquals(subscription.getCurrentPeriodEnd(), result.currentPeriodEnd());
+        assertEquals(subscription.getNextBillingDate(), result.nextBillingDate());
+    }
+
+    @Test
+    void findLatestByUserIdThrowsWhenNoneFound() {
+        when(subscriptionsRepository.findFirstByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundSubscriptionException.class, () -> subscriptionsService.findLatestByUserId(1L));
     }
 
     @Test
