@@ -1,5 +1,6 @@
 package com.siren.sirenpaymentapi.controller.kakao;
 
+import com.siren.sirenpaymentapi.controller.kakao.doc.KakaoBillingKeyRegistrationControllerDoc;
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.RegistrationMode;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
@@ -34,7 +35,7 @@ import java.util.Optional;
 @RequestMapping("/api/payment/billing-keys/kakao")
 @RequiredArgsConstructor
 @Slf4j
-public class KakaoBillingKeyRegistrationController {
+public class KakaoBillingKeyRegistrationController implements KakaoBillingKeyRegistrationControllerDoc {
 
     @Value("${payment.kakao-callback}")
     private String callbackBaseUrl;

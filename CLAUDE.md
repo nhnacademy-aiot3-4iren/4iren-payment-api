@@ -6,12 +6,12 @@
 
 ## 스택
 - Spring Boot 3.5.16, Java 21, Maven
-- MySQL 8.0 (전용 스키마 `payment_db`, 다른 서비스 DB와 완전 분리)
+- MySQL 8.0 (dev는 전용 스키마 `payment_db`, **prod는 다른 서비스와 물리 스키마 `aiot03_team4`를 공유** — Flyway 이력 테이블명(`payment_flyway_schema_history`)으로만 논리적으로 분리됨. 근거: 2026-08-27 ai-log, `4iren-config-repo/4iren-payment-prod.properties`)
 - RabbitMQ (Account와의 OWNER 승급/강등 이벤트 연동)
 - Redis + Shedlock (자동청구 스케줄러 분산락)
 
 ## 아키텍처 원칙 (반드시 지킬 것)
-1. **Database-per-Service**: 다른 서비스 DB에 직접 접근 금지. Account/Core와는 RabbitMQ 이벤트로만.
+1. **Database-per-Service(논리적)**: prod는 물리 스키마를 공유하지만, 다른 서비스 소유 테이블에 직접 접근(JOIN·FK 등)하는 것은 여전히 금지. Account/Core와는 RabbitMQ 이벤트로만 통신. 새 테이블 추가 시 다른 서비스(특히 notification) 테이블명과 겹치지 않는지 확인할 것.
 2. **OWNER는 Account 소유 개념**(`UserRole.OWNER`). Core의 `TeamRole.OWNER`는 팀 멤버십 내 별개 역할 — 이름만 같고 무관, 혼동 주의.
 3. **하드 삭제 없음**. `billing_keys`/`subscriptions`는 전부 상태 전이(`ACTIVE`/`DELETED`, `PAST_DUE`/`EXPIRED` 등)로만 표현. FK는 `ON DELETE` 절 없음(기본값 `RESTRICT`) — cascade 자체를 안 씀.
 4. **`billing_keys.provider_credential`은 반드시 암호화**(`EncryptedStringConverter`). `payment.crypto.password`/`salt`는 `4iren-config-repo`에서 공급, 로컬 application.yaml엔 두지 않음.

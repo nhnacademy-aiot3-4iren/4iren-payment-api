@@ -1,5 +1,6 @@
 package com.siren.sirenpaymentapi.controller;
 
+import com.siren.sirenpaymentapi.controller.doc.PlanPriceControllerDoc;
 import com.siren.sirenpaymentapi.dto.plan_prices.PlanPriceResponse;
 import com.siren.sirenpaymentapi.service.basic_service.PlanPricesService;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/payment/plans")
 @RequiredArgsConstructor
-public class PlanPriceController {
+public class PlanPriceController implements PlanPriceControllerDoc {
     private final PlanPricesService planPricesService;
 
     @GetMapping

@@ -1,5 +1,6 @@
 package com.siren.sirenpaymentapi.controller;
 
+import com.siren.sirenpaymentapi.controller.doc.SubscriptionControllerDoc;
 import com.siren.sirenpaymentapi.dto.subscriptions.SubscriptionResponse;
 import com.siren.sirenpaymentapi.security.RequireRole;
 import com.siren.sirenpaymentapi.security.Role;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/payment/subscriptions")
 @RequiredArgsConstructor
 @RequireRole(value = Role.OWNER)
-public class SubscriptionController {
+public class SubscriptionController implements SubscriptionControllerDoc {
     private final BillingKeyRegistrationService billingKeyRegistrationService;
     private final SubscriptionsService subscriptionsService;
 
