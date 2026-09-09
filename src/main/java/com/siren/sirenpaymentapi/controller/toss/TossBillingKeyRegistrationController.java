@@ -1,5 +1,6 @@
 package com.siren.sirenpaymentapi.controller.toss;
 
+import com.siren.sirenpaymentapi.controller.toss.doc.TossBillingKeyRegistrationControllerDoc;
 import com.siren.sirenpaymentapi.domain.Provider;
 import com.siren.sirenpaymentapi.domain.RegistrationMode;
 import com.siren.sirenpaymentapi.domain.entity.PlanPrices;
@@ -34,7 +35,7 @@ import java.util.Optional;
 @RequestMapping("/api/payment/billing-keys/toss")
 @RequiredArgsConstructor
 @Slf4j
-public class TossBillingKeyRegistrationController {
+public class TossBillingKeyRegistrationController implements TossBillingKeyRegistrationControllerDoc {
 
     @Value("${payment.callback}")
     private String callbackUrl;

@@ -1,5 +1,6 @@
 package com.siren.sirenpaymentapi.controller;
 
+import com.siren.sirenpaymentapi.controller.doc.PaymentHistoryControllerDoc;
 import com.siren.sirenpaymentapi.dto.payments.PaymentHistoryResponse;
 import com.siren.sirenpaymentapi.security.RequireRole;
 import com.siren.sirenpaymentapi.security.Role;
@@ -16,7 +17,7 @@ import java.util.List;
 @RequestMapping("/api/payment/payments")
 @RequiredArgsConstructor
 @RequireRole(value = Role.OWNER)
-public class PaymentHistoryController {
+public class PaymentHistoryController implements PaymentHistoryControllerDoc {
     private final PaymentsService paymentsService;
 
     @GetMapping
